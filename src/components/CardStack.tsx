@@ -31,37 +31,33 @@ export function CardStack() {
   // Gestos compartidos
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  const isProcessing = useSharedValue(false);
 
-  // Calcular umbral según sensibilidad
-  const getThreshold = useCallback(() => {
-    switch (settings.sensitivity) {
-      case 'high':
-        return 85;
-      case 'low':
-        return 180;
-      case 'medium':
-      default:
-        return 125;
-    }
-  }, [settings.sensitivity]);
+  // Valores primitivos accesibles de forma segura en worklets
+  const isVertical = settings.gestureDirection === 'vertical';
+  const threshold =
+    settings.sensitivity === 'high' ? 85 : settings.sensitivity === 'low' ? 180 : 125;
 
-  const onSwipeComplete = useCallback(
+  // Callback de JavaScript para actualizar estado y disparar hápticos en el hilo JS
+  const handleSwipeJS = useCallback(
     (action: 'keep' | 'trash') => {
-      'worklet';
-      if (action === 'keep') {
-        runOnJS(markAsKept)();
-      } else {
-        runOnJS(moveToTrash)();
-      }
       translateX.value = 0;
       translateY.value = 0;
+      isProcessing.value = false;
+      if (action === 'keep') {
+        markAsKept();
+      } else {
+        moveToTrash();
+      }
     },
-    [markAsKept, moveToTrash, translateX, translateY]
+    [markAsKept, moveToTrash, translateX, translateY, isProcessing]
   );
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
-      if (settings.gestureDirection === 'vertical') {
+      'worklet';
+      if (isProcessing.value) return;
+      if (isVertical) {
         translateY.value = event.translationY;
         translateX.value = event.translationX * 0.15; // ligera rotación orgánica
       } else {
@@ -70,17 +66,24 @@ export function CardStack() {
       }
     })
     .onEnd((event) => {
-      const threshold = getThreshold();
+      'worklet';
+      if (isProcessing.value) return;
 
-      if (settings.gestureDirection === 'vertical') {
+      if (isVertical) {
         // Hacia arriba = Basura, Hacia abajo = Conservar
         if (event.translationY < -threshold || event.velocityY < -600) {
-          translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 250 }, () => {
-            onSwipeComplete('trash');
+          isProcessing.value = true;
+          translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(handleSwipeJS)('trash');
+            }
           });
         } else if (event.translationY > threshold || event.velocityY > 600) {
-          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, () => {
-            onSwipeComplete('keep');
+          isProcessing.value = true;
+          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(handleSwipeJS)('keep');
+            }
           });
         } else {
           translateY.value = withSpring(0, { damping: 15 });
@@ -89,12 +92,18 @@ export function CardStack() {
       } else {
         // Hacia la izquierda = Basura, Hacia la derecha = Conservar
         if (event.translationX < -threshold || event.velocityX < -600) {
-          translateX.value = withTiming(-SCREEN_WIDTH * 1.2, { duration: 250 }, () => {
-            onSwipeComplete('trash');
+          isProcessing.value = true;
+          translateX.value = withTiming(-SCREEN_WIDTH * 1.2, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(handleSwipeJS)('trash');
+            }
           });
         } else if (event.translationX > threshold || event.velocityX > 600) {
-          translateX.value = withTiming(SCREEN_WIDTH * 1.2, { duration: 250 }, () => {
-            onSwipeComplete('keep');
+          isProcessing.value = true;
+          translateX.value = withTiming(SCREEN_WIDTH * 1.2, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(handleSwipeJS)('keep');
+            }
           });
         } else {
           translateX.value = withSpring(0, { damping: 15 });

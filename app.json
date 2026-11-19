@@ -41,7 +41,8 @@
         {
           "photosPermission": "Permite acceder a tus fotos para organizarlas y limpiarlas.",
           "savePhotosPermission": "Permite guardar y organizar fotos en álbumes.",
-          "isAccessMediaLocationEnabled": true
+          "isAccessMediaLocationEnabled": true,
+          "granularPermissions": ["photo", "video"]
         }
       ]
     ]

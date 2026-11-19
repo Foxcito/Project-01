@@ -37,11 +37,13 @@ export function MediaCard({ asset, isActive }: MediaCardProps) {
   const pinchGesture = Gesture.Pinch()
     .enabled(asset.mediaType === 'photo')
     .onUpdate((event) => {
+      'worklet';
       scale.value = Math.max(1, Math.min(event.scale, 3.5));
       focalX.value = event.focalX;
       focalY.value = event.focalY;
     })
     .onEnd(() => {
+      'worklet';
       scale.value = withSpring(1);
     });
 

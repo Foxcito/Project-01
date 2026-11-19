@@ -137,7 +137,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   // Solicitar permisos de galería
   const requestPermission = useCallback(async (): Promise<boolean> => {
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video']);
       const granted = status === 'granted';
       setHasPermission(granted);
       return granted;
@@ -167,9 +167,9 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const reloadMedia = useCallback(async () => {
     setIsLoading(true);
     try {
-      const perm = await MediaLibrary.getPermissionsAsync();
+      const perm = await MediaLibrary.getPermissionsAsync(false, ['photo', 'video']);
       if (!perm.granted) {
-        const req = await MediaLibrary.requestPermissionsAsync();
+        const req = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video']);
         if (!req.granted) {
           setHasPermission(false);
           // Si no hay permisos o es emulador, usar datos de demostración
