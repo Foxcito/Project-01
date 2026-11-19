@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Foxcito Cleaner",
+    "slug": "foxcito-cleaner",
+    "version": "1.0.0",
+    "scheme": "foxcito-cleaner",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Esta app necesita acceso a tu galería para organizar y limpiar fotos y videos.",
+        "NSPhotoLibraryAddUsageDescription": "Esta app necesita permiso para mover o guardar fotos en álbumes."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "MANAGE_EXTERNAL_STORAGE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permite acceder a tus fotos para organizarlas y limpiarlas.",
+          "savePhotosPermission": "Permite guardar y organizar fotos en álbumes.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}
