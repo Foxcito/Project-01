@@ -26,6 +26,8 @@ import {
   RotateCcw,
   Share2,
   ArrowRight,
+  ArrowDown,
+  ArrowLeft,
   Sparkles,
 } from 'lucide-react-native';
 
@@ -50,12 +52,13 @@ export function CardStack() {
   const translateY = useSharedValue(0);
   const isProcessing = useSharedValue(false);
 
-  // Valores primitivos calculados para los worklets
-  const isVertical = settings.gestureDirection === 'vertical';
+  // Valores de configuración
+  const keepDirection = settings.keepGestureDirection || 'left';
+  const isKeepLeft = keepDirection === 'left';
   const threshold =
-    settings.sensitivity === 'high' ? 80 : settings.sensitivity === 'low' ? 170 : 120;
+    settings.sensitivity === 'high' ? 85 : settings.sensitivity === 'low' ? 170 : 120;
 
-  // Callback de JavaScript para actualizar estado y disparar hápticos en el hilo JS
+  // Callback de JavaScript para actualizar estado y hápticos en el hilo JS
   const handleSwipeJS = useCallback(
     (action: 'keep' | 'trash') => {
       translateX.value = 0;
@@ -70,101 +73,95 @@ export function CardStack() {
     [markAsKept, moveToTrash, translateX, translateY, isProcessing]
   );
 
-  // Disparar acción de deslizamiento programáticamente desde los botones de atajo
+  // Disparar acción programáticamente
   const triggerSwipeProgrammatic = useCallback(
     (action: 'keep' | 'trash') => {
       if (isProcessing.value || !currentAsset) return;
       isProcessing.value = true;
 
       if (action === 'trash') {
-        if (isVertical) {
-          translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 240 }, (finished) => {
-            if (finished) runOnJS(handleSwipeJS)('trash');
-          });
-        } else {
-          translateX.value = withTiming(-SCREEN_WIDTH * 1.2, { duration: 240 }, (finished) => {
-            if (finished) runOnJS(handleSwipeJS)('trash');
-          });
-        }
+        // Arriba siempre papelera
+        translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 220 }, (finished) => {
+          if (finished) runOnJS(handleSwipeJS)('trash');
+        });
       } else {
-        if (isVertical) {
-          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 240 }, (finished) => {
+        // Conservar según configuración (Izquierda o Abajo)
+        if (isKeepLeft) {
+          translateX.value = withTiming(-SCREEN_WIDTH * 1.25, { duration: 220 }, (finished) => {
             if (finished) runOnJS(handleSwipeJS)('keep');
           });
         } else {
-          translateX.value = withTiming(SCREEN_WIDTH * 1.2, { duration: 240 }, (finished) => {
+          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 220 }, (finished) => {
             if (finished) runOnJS(handleSwipeJS)('keep');
           });
         }
       }
     },
-    [currentAsset, isVertical, SCREEN_HEIGHT, SCREEN_WIDTH, handleSwipeJS, isProcessing, translateX, translateY]
+    [currentAsset, isKeepLeft, SCREEN_HEIGHT, SCREEN_WIDTH, handleSwipeJS, isProcessing, translateX, translateY]
   );
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
       'worklet';
       if (isProcessing.value) return;
-      if (isVertical) {
+
+      if (isKeepLeft) {
+        // Arriba (trash) y Izquierda (keep) son las direcciones activas
+        // Permitimos movimiento libre pero amortiguando direcciones opuestas
         translateY.value = event.translationY;
-        translateX.value = event.translationX * 0.12;
-      } else {
         translateX.value = event.translationX;
-        translateY.value = event.translationY * 0.12;
+      } else {
+        // Vertical: Arriba (trash) y Abajo (keep)
+        translateY.value = event.translationY;
+        translateX.value = event.translationX * 0.15;
       }
     })
     .onEnd((event) => {
       'worklet';
       if (isProcessing.value) return;
 
-      if (isVertical) {
-        if (event.translationY < -threshold || event.velocityY < -600) {
-          isProcessing.value = true;
-          translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 240 }, (finished) => {
-            if (finished) {
-              runOnJS(handleSwipeJS)('trash');
-            }
-          });
-        } else if (event.translationY > threshold || event.velocityY > 600) {
-          isProcessing.value = true;
-          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 240 }, (finished) => {
-            if (finished) {
-              runOnJS(handleSwipeJS)('keep');
-            }
-          });
-        } else {
-          translateY.value = withSpring(0, { damping: 16 });
-          translateX.value = withSpring(0);
-        }
-      } else {
+      // Deslizar ARRIBA: Papelera siempre
+      if (event.translationY < -threshold || event.velocityY < -600) {
+        isProcessing.value = true;
+        translateY.value = withTiming(-SCREEN_HEIGHT, { duration: 220 }, (finished) => {
+          if (finished) runOnJS(handleSwipeJS)('trash');
+        });
+        return;
+      }
+
+      // Deslizar para CONSERVAR
+      if (isKeepLeft) {
+        // Izquierda es Conservar
         if (event.translationX < -threshold || event.velocityX < -600) {
           isProcessing.value = true;
-          translateX.value = withTiming(-SCREEN_WIDTH * 1.2, { duration: 240 }, (finished) => {
-            if (finished) {
-              runOnJS(handleSwipeJS)('trash');
-            }
+          translateX.value = withTiming(-SCREEN_WIDTH * 1.25, { duration: 220 }, (finished) => {
+            if (finished) runOnJS(handleSwipeJS)('keep');
           });
-        } else if (event.translationX > threshold || event.velocityX > 600) {
+          return;
+        }
+      } else {
+        // Abajo es Conservar
+        if (event.translationY > threshold || event.velocityY > 600) {
           isProcessing.value = true;
-          translateX.value = withTiming(SCREEN_WIDTH * 1.2, { duration: 240 }, (finished) => {
-            if (finished) {
-              runOnJS(handleSwipeJS)('keep');
-            }
+          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 220 }, (finished) => {
+            if (finished) runOnJS(handleSwipeJS)('keep');
           });
-        } else {
-          translateX.value = withSpring(0, { damping: 16 });
-          translateY.value = withSpring(0);
+          return;
         }
       }
+
+      // Si no superó el umbral, regresar con amortiguación limpia
+      translateX.value = withSpring(0, { damping: 18, stiffness: 150 });
+      translateY.value = withSpring(0, { damping: 18, stiffness: 150 });
     });
 
-  // Estilo animado de la tarjeta frontal activa
+  // Estilo animado de la tarjeta frontal activa (rotación sutil según arrastre)
   const topCardAnimatedStyle = useAnimatedStyle(() => {
-    const mainDelta = isVertical ? translateY.value : translateX.value;
+    const rotDelta = isKeepLeft ? translateX.value : translateX.value + translateY.value * 0.2;
     const rotation = interpolate(
-      mainDelta,
+      rotDelta,
       [-SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2],
-      [-10, 0, 10],
+      [-8, 0, 8],
       Extrapolation.CLAMP
     );
 
@@ -177,28 +174,28 @@ export function CardStack() {
     };
   });
 
-  // Tarjeta trasera estática y limpia (no se mueve ni tiembla con el gesto)
+  // Tarjeta trasera ESTÁTICA y completamente aislada (nunca tiembla ni se mueve)
   const backCardStyle = {
     transform: [{ scale: 0.95 }, { translateY: 10 }],
     opacity: 0.72,
   };
 
-  // Etiqueta dinámica: DESCARTAR
+  // Etiqueta dinámica: DESCARTAR (Arriba)
   const trashLabelStyle = useAnimatedStyle(() => {
-    const delta = isVertical ? -translateY.value : -translateX.value;
-    const opacity = interpolate(delta, [25, 95], [0, 1], Extrapolation.CLAMP);
-    const scale = interpolate(delta, [25, 95], [0.85, 1.05], Extrapolation.CLAMP);
+    const delta = -translateY.value;
+    const opacity = interpolate(delta, [30, 100], [0, 1], Extrapolation.CLAMP);
+    const scale = interpolate(delta, [30, 100], [0.85, 1.05], Extrapolation.CLAMP);
     return {
       opacity,
       transform: [{ scale }],
     };
   });
 
-  // Etiqueta dinámica: CONSERVAR
+  // Etiqueta dinámica: CONSERVAR (Izquierda o Abajo según configuración)
   const keepLabelStyle = useAnimatedStyle(() => {
-    const delta = isVertical ? translateY.value : translateX.value;
-    const opacity = interpolate(delta, [25, 95], [0, 1], Extrapolation.CLAMP);
-    const scale = interpolate(delta, [25, 95], [0.85, 1.05], Extrapolation.CLAMP);
+    const delta = isKeepLeft ? -translateX.value : translateY.value;
+    const opacity = interpolate(delta, [30, 100], [0, 1], Extrapolation.CLAMP);
+    const scale = interpolate(delta, [30, 100], [0.85, 1.05], Extrapolation.CLAMP);
     return {
       opacity,
       transform: [{ scale }],
@@ -235,7 +232,7 @@ export function CardStack() {
           <Animated.View style={[styles.cardContainer, topCardAnimatedStyle]}>
             <MediaCard asset={currentAsset} isActive={true} />
 
-            {/* Etiqueta dinámica: DESCARTAR */}
+            {/* Etiqueta dinámica: DESCARTAR (Arriba) */}
             <Animated.View
               style={[
                 styles.floatingLabel,
@@ -249,17 +246,21 @@ export function CardStack() {
               <Text style={[styles.labelText, { color: colors.trash }]}>DESCARTAR</Text>
             </Animated.View>
 
-            {/* Etiqueta dinámica: CONSERVAR */}
+            {/* Etiqueta dinámica: CONSERVAR (Izquierda o Abajo) */}
             <Animated.View
               style={[
                 styles.floatingLabel,
-                styles.keepLabel,
+                isKeepLeft ? styles.keepLabelLeft : styles.keepLabelBottom,
                 { backgroundColor: colors.keepGlow, borderColor: colors.keep },
                 keepLabelStyle,
               ]}
               pointerEvents="none"
             >
-              <CheckCircle2 size={20} color={colors.keep} />
+              {isKeepLeft ? (
+                <ArrowLeft size={20} color={colors.keep} />
+              ) : (
+                <CheckCircle2 size={20} color={colors.keep} />
+              )}
               <Text style={[styles.labelText, { color: colors.keep }]}>CONSERVAR</Text>
             </Animated.View>
           </Animated.View>
@@ -327,9 +328,13 @@ export function CardStack() {
             activeOpacity={0.7}
             style={[styles.actionButton, { backgroundColor: colors.keepGlow }]}
           >
-            <ArrowRight size={20} color={colors.keep} strokeWidth={2.5} />
+            {isKeepLeft ? (
+              <ArrowLeft size={20} color={colors.keep} strokeWidth={2.5} />
+            ) : (
+              <ArrowDown size={20} color={colors.keep} strokeWidth={2.5} />
+            )}
             <Text style={[styles.actionBtnLabel, { color: colors.keep, fontWeight: '700' }]}>
-              Siguiente
+              Conservar
             </Text>
           </TouchableOpacity>
         </GlassView>
@@ -384,9 +389,13 @@ const styles = StyleSheet.create({
     top: 24,
     alignSelf: 'center',
   },
-  keepLabel: {
+  keepLabelBottom: {
     bottom: 24,
     alignSelf: 'center',
+  },
+  keepLabelLeft: {
+    left: 20,
+    top: '45%',
   },
   labelText: {
     fontSize: 15,

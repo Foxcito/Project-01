@@ -113,9 +113,24 @@ export default function TrashScreen() {
         {/* Encabezado */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.title, { color: colors.text }]}>Papelera Temporal</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: colors.text }]}>Papelera Total</Text>
+              <View
+                style={[
+                  styles.retentionBadge,
+                  {
+                    backgroundColor: colors.tagBg,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.retentionBadgeText, { color: colors.primary }]}>
+                  {settings.trashRetention === '30_days' ? '30 días' : 'Ilimitada'}
+                </Text>
+              </View>
+            </View>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {trashCount} elementos · {formatBytes(totalTrashBytes)} listos para liberar
+              {trashCount} elementos · {formatBytes(totalTrashBytes)} recuperables
             </Text>
           </View>
 
@@ -126,7 +141,7 @@ export default function TrashScreen() {
               style={[styles.restoreAllBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSubtle }]}
             >
               <RotateCcw size={14} color={colors.textSecondary} />
-              <Text style={[styles.restoreAllText, { color: colors.textSecondary }]}>Restaurar</Text>
+              <Text style={[styles.restoreAllText, { color: colors.textSecondary }]}>Restaurar Todo</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -136,7 +151,9 @@ export default function TrashScreen() {
           <GlassView intensity={25} borderRadius={16} style={[styles.infoBanner, { borderColor: colors.border }]}>
             <AlertTriangle size={16} color={colors.amber} />
             <Text style={[styles.infoBannerText, { color: colors.textSecondary }]}>
-              Los archivos no se borran de tu teléfono hasta pulsar "Vaciar Papelera".
+              {settings.trashRetention === '30_days'
+                ? 'Los elementos se eliminan automáticamente tras 30 días o al pulsar "Vaciar Papelera".'
+                : 'Sin caducidad automática: los archivos se conservan aquí hasta que decidas vaciar la papelera.'}
             </Text>
           </GlassView>
         )}
@@ -205,10 +222,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 26,
     fontWeight: '800',
     letterSpacing: -0.5,
+  },
+  retentionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retentionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: 13,

@@ -142,8 +142,13 @@ export function AlbumQuickBar() {
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <>
-                <FolderInput size={16} color="#FFFFFF" />
-                <Text style={styles.applyBtnText}>
+                <FolderInput size={16} color={colors.isDark ? '#000000' : '#FFFFFF'} />
+                <Text
+                  style={[
+                    styles.applyBtnText,
+                    { color: colors.isDark ? '#000000' : '#FFFFFF' },
+                  ]}
+                >
                   {settings.albumActionMode === 'move' ? 'Mover a' : 'Copiar a'}{' '}
                   "{selectedDestAlbum.title}"
                 </Text>

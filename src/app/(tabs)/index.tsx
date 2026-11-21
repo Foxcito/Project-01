@@ -1,21 +1,32 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '@/context/SettingsContext';
+import { useMedia } from '@/context/MediaContext';
 import { TopHeader } from '@/components/TopHeader';
 import { CardStack } from '@/components/CardStack';
 import { AlbumQuickBar } from '@/components/AlbumQuickBar';
+import { BatchSummaryModal } from '@/components/BatchSummaryModal';
 
 export default function ReviewScreen() {
   const { colors } = useSettings();
+  const { queue, pendingCount } = useMedia();
+  const [batchModalVisible, setBatchModalVisible] = useState(false);
+
+  // Apertura automática de resumen por lote al terminar los archivos de la selección
+  useEffect(() => {
+    if (queue.length === 0 && pendingCount > 0) {
+      setBatchModalVisible(true);
+    }
+  }, [queue.length, pendingCount]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <View style={styles.container}>
-        {/* Barra superior minimalista */}
-        <TopHeader />
+        {/* Barra superior minimalista sin íconos duplicados */}
+        <TopHeader onOpenBatchSummary={() => setBatchModalVisible(true)} />
 
-        {/* Pila de tarjetas central con física Reanimated */}
+        {/* Pila de tarjetas central con física aislada y gesto configurable */}
         <View style={styles.stackWrapper}>
           <CardStack />
         </View>
@@ -24,6 +35,12 @@ export default function ReviewScreen() {
         <View style={styles.quickBarWrapper}>
           <AlbumQuickBar />
         </View>
+
+        {/* Modal Resumen de Lote ¡Listo! */}
+        <BatchSummaryModal
+          visible={batchModalVisible}
+          onClose={() => setBatchModalVisible(false)}
+        />
       </View>
     </SafeAreaView>
   );

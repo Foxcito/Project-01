@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { UserSettings, ThemeMode, GestureDirection, SensitivityLevel, AlbumActionMode } from '@/types/settings';
+import {
+  UserSettings,
+  ThemeMode,
+  KeepGestureDirection,
+  SensitivityLevel,
+  AlbumActionMode,
+  TrashRetention,
+  MediaTypeFilter,
+} from '@/types/settings';
 import { loadUserSettings, saveUserSettings, DEFAULT_SETTINGS } from '@/utils/storage';
 import { THEMES, ColorPalette } from '@/constants/theme';
 import { useHaptics } from '@/hooks/useHaptics';
@@ -12,9 +20,11 @@ interface SettingsContextValue {
   updateSetting: <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => Promise<void>;
   setTheme: (theme: ThemeMode) => Promise<void>;
   toggleTheme: () => Promise<void>;
-  setGestureDirection: (direction: GestureDirection) => Promise<void>;
+  setKeepGestureDirection: (direction: KeepGestureDirection) => Promise<void>;
   setSensitivity: (sensitivity: SensitivityLevel) => Promise<void>;
   setAlbumActionMode: (mode: AlbumActionMode) => Promise<void>;
+  setTrashRetention: (retention: TrashRetention) => Promise<void>;
+  setMediaTypeFilter: (filter: MediaTypeFilter) => Promise<void>;
   toggleAutoplay: () => Promise<void>;
   toggleDefaultMuted: () => Promise<void>;
   toggleHaptics: () => Promise<void>;
@@ -58,12 +68,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, [updateSetting, haptics]);
 
   const toggleTheme = useCallback(async () => {
-    const nextTheme: ThemeMode = settings.theme === 'oled' ? 'vintage' : 'oled';
+    const themeCycle: ThemeMode[] = ['oled', 'vintage', 'graphite', 'nordic'];
+    const currentIndex = themeCycle.indexOf(settings.theme);
+    const nextTheme = themeCycle[(currentIndex + 1) % themeCycle.length];
     await setTheme(nextTheme);
   }, [settings.theme, setTheme]);
 
-  const setGestureDirection = useCallback(async (direction: GestureDirection) => {
-    await updateSetting('gestureDirection', direction);
+  const setKeepGestureDirection = useCallback(async (direction: KeepGestureDirection) => {
+    await updateSetting('keepGestureDirection', direction);
     haptics.selection();
   }, [updateSetting, haptics]);
 
@@ -74,6 +86,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const setAlbumActionMode = useCallback(async (mode: AlbumActionMode) => {
     await updateSetting('albumActionMode', mode);
+    haptics.selection();
+  }, [updateSetting, haptics]);
+
+  const setTrashRetention = useCallback(async (retention: TrashRetention) => {
+    await updateSetting('trashRetention', retention);
+    haptics.selection();
+  }, [updateSetting, haptics]);
+
+  const setMediaTypeFilter = useCallback(async (filter: MediaTypeFilter) => {
+    await updateSetting('mediaTypeFilter', filter);
     haptics.selection();
   }, [updateSetting, haptics]);
 
@@ -107,10 +129,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       const next: UserSettings = {
         ...prev,
         stats: {
-          totalBytesFreed: prev.stats.totalBytesFreed + bytesFreed,
-          totalReviewed: prev.stats.totalReviewed + reviewed,
-          totalTrashed: prev.stats.totalTrashed + trashed,
-          totalOrganized: prev.stats.totalOrganized + organized,
+          totalBytesFreed: Math.max(0, (prev.stats?.totalBytesFreed || 0) + bytesFreed),
+          totalReviewed: Math.max(0, (prev.stats?.totalReviewed || 0) + reviewed),
+          totalTrashed: Math.max(0, (prev.stats?.totalTrashed || 0) + trashed),
+          totalOrganized: Math.max(0, (prev.stats?.totalOrganized || 0) + organized),
         },
       };
       saveUserSettings(next);
@@ -147,9 +169,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         updateSetting,
         setTheme,
         toggleTheme,
-        setGestureDirection,
+        setKeepGestureDirection,
         setSensitivity,
         setAlbumActionMode,
+        setTrashRetention,
+        setMediaTypeFilter,
         toggleAutoplay,
         toggleDefaultMuted,
         toggleHaptics,

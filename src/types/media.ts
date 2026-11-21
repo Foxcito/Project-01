@@ -53,3 +53,18 @@ export interface UndoAction {
   albumId?: string;
   albumTitle?: string;
 }
+
+export interface PendingBatchAction {
+  id: string;
+  type: 'trash' | 'keep' | 'album';
+  asset: MediaAsset;
+  targetAlbum?: AlbumItem;
+}
+
+export interface BatchSummary {
+  trashAssets: MediaAsset[];
+  trashBytes: number;
+  albumMoves: { album: AlbumItem; assets: MediaAsset[] }[];
+  keptAssets: MediaAsset[];
+  totalActions: number;
+}

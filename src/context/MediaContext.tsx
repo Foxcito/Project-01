@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { Share } from 'react-native';
 import * as MediaLibrary from 'expo-media-library/legacy';
-import { MediaAsset, AlbumItem, TrashItem, FilterType, UndoAction, TimePeriodGroup } from '@/types/media';
+import {
+  MediaAsset,
+  AlbumItem,
+  TrashItem,
+  FilterType,
+  UndoAction,
+  TimePeriodGroup,
+  PendingBatchAction,
+  BatchSummary,
+} from '@/types/media';
 import { loadTrashItems, saveTrashItems, loadReviewedIds, saveReviewedIds } from '@/utils/storage';
 import { formatMonthYearFull } from '@/utils/formatters';
 import { useSettings } from './SettingsContext';
@@ -26,6 +35,12 @@ interface MediaContextValue {
   albums: AlbumItem[];
   undoStack: UndoAction[];
   canUndo: boolean;
+  // Flujo por lotes (Batch)
+  pendingBatchActions: PendingBatchAction[];
+  pendingCount: number;
+  batchSummary: BatchSummary;
+  applyBatchChanges: () => Promise<{ success: boolean; movedCount: number; trashedCount: number; keptCount: number }>;
+  discardPendingBatch: () => void;
   // Acciones
   requestPermission: () => Promise<boolean>;
   setFilter: (filter: FilterType) => void;
@@ -158,6 +173,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
+  const [pendingBatchActions, setPendingBatchActions] = useState<PendingBatchAction[]>([]);
 
   // Filtros activos y selecciones
   const [activeFilter, setActiveFilter] = useState<FilterType>('unorganized');
@@ -165,16 +181,25 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriodGroup | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Carga inicial de almacenamiento local
+  // Carga inicial y retención de 30 días
   useEffect(() => {
     (async () => {
       const storedTrash = await loadTrashItems();
-      setTrashItems(storedTrash);
+      if (settings.trashRetention === '30_days') {
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const validTrash = storedTrash.filter((t) => t.trashedAt >= thirtyDaysAgo);
+        setTrashItems(validTrash);
+        if (validTrash.length !== storedTrash.length) {
+          await saveTrashItems(validTrash);
+        }
+      } else {
+        setTrashItems(storedTrash);
+      }
 
       const storedReviewed = await loadReviewedIds();
       setReviewedIds(new Set(storedReviewed));
     })();
-  }, []);
+  }, [settings.trashRetention]);
 
   // Solicitar permisos de galería solo para fotos y videos
   const requestPermission = useCallback(async (): Promise<boolean> => {
@@ -335,7 +360,6 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         a.title.toLowerCase() !== 'recientes'
     );
     if (list.length === 0) {
-      // Álbumes de muestra si no hay otros
       return [
         { id: 'sample-alb-1', title: 'Viajes', assetCount: 14 },
         { id: 'sample-alb-2', title: 'Diseño & Capturas', assetCount: 8 },
@@ -345,10 +369,20 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     return list;
   }, [albums]);
 
-  // Filtrar la cola activa
+  // Filtrar la cola activa excluyendo items en papelera, revisados o en lote pendiente
   const queue = useMemo(() => {
     const trashedIds = new Set(trashItems.map((t) => t.asset.id));
-    let list = rawAssets.filter((a) => !trashedIds.has(a.id) && !reviewedIds.has(a.id));
+    const pendingIds = new Set(pendingBatchActions.map((p) => p.asset.id));
+    let list = rawAssets.filter(
+      (a) => !trashedIds.has(a.id) && !reviewedIds.has(a.id) && !pendingIds.has(a.id)
+    );
+
+    // Filtro por tipo de medio (Todo / Solo fotos / Solo videos)
+    if (settings.mediaTypeFilter === 'photo') {
+      list = list.filter((a) => a.mediaType === 'photo');
+    } else if (settings.mediaTypeFilter === 'video') {
+      list = list.filter((a) => a.mediaType === 'video');
+    }
 
     if (selectedPeriod) {
       list = list.filter((a) => {
@@ -390,7 +424,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     }
 
     return list;
-  }, [rawAssets, trashItems, reviewedIds, selectedPeriod, selectedAlbum, activeFilter]);
+  }, [rawAssets, trashItems, reviewedIds, pendingBatchActions, settings.mediaTypeFilter, selectedPeriod, selectedAlbum, activeFilter]);
 
   const currentAsset = queue[currentIndex] || null;
   const totalInQueue = queue.length;
@@ -402,45 +436,73 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   );
   const canUndo = undoStack.length > 0;
 
-  // Acción: Deslizar o presionar para CONSERVAR / SIGUIENTE
+  // Resumen del lote pendiente acumulado
+  const batchSummary = useMemo<BatchSummary>(() => {
+    const trashAssets: MediaAsset[] = [];
+    let trashBytes = 0;
+    const albumMap = new Map<string, { album: AlbumItem; assets: MediaAsset[] }>();
+    const keptAssets: MediaAsset[] = [];
+
+    for (const action of pendingBatchActions) {
+      if (action.type === 'trash') {
+        trashAssets.push(action.asset);
+        trashBytes += action.asset.fileSize;
+      } else if (action.type === 'keep') {
+        keptAssets.push(action.asset);
+      } else if (action.type === 'album' && action.targetAlbum) {
+        const alb = action.targetAlbum;
+        if (!albumMap.has(alb.id)) {
+          albumMap.set(alb.id, { album: alb, assets: [] });
+        }
+        albumMap.get(alb.id)!.assets.push(action.asset);
+      }
+    }
+
+    return {
+      trashAssets,
+      trashBytes,
+      albumMoves: Array.from(albumMap.values()),
+      keptAssets,
+      totalActions: pendingBatchActions.length,
+    };
+  }, [pendingBatchActions]);
+
+  // Acción: Deslizar o presionar para CONSERVAR (se acumula en el lote)
   const markAsKept = useCallback(
     (assetParam?: MediaAsset) => {
       const asset = assetParam || currentAsset;
       if (!asset) return;
 
       haptics.impactLight();
-      const newReviewed = new Set(reviewedIds);
-      newReviewed.add(asset.id);
-      setReviewedIds(newReviewed);
-      saveReviewedIds(Array.from(newReviewed));
+      const action: PendingBatchAction = {
+        id: `batch-keep-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        type: 'keep',
+        asset,
+      };
 
+      setPendingBatchActions((prev) => [action, ...prev]);
       setUndoStack((prev) => [{ type: 'keep', asset }, ...prev]);
-      incrementStats({ reviewed: 1 });
     },
-    [currentAsset, reviewedIds, haptics, incrementStats]
+    [currentAsset, haptics]
   );
 
-  // Acción: Deslizar o presionar para PAPELERA TEMPORAL
+  // Acción: Deslizar o presionar para PAPELERA (se acumula en el lote)
   const moveToTrash = useCallback(
     (assetParam?: MediaAsset) => {
       const asset = assetParam || currentAsset;
       if (!asset) return;
 
       haptics.impactMedium();
-      const newTrashItem: TrashItem = {
+      const action: PendingBatchAction = {
+        id: `batch-trash-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        type: 'trash',
         asset,
-        trashedAt: Date.now(),
-        sizeBytes: asset.fileSize,
       };
 
-      const updatedTrash = [newTrashItem, ...trashItems];
-      setTrashItems(updatedTrash);
-      saveTrashItems(updatedTrash);
-
+      setPendingBatchActions((prev) => [action, ...prev]);
       setUndoStack((prev) => [{ type: 'trash', asset }, ...prev]);
-      incrementStats({ trashed: 1, bytesFreed: asset.fileSize });
     },
-    [currentAsset, trashItems, haptics, incrementStats]
+    [currentAsset, haptics]
   );
 
   // Acción: Compartir archivo actual
@@ -463,46 +525,31 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     [currentAsset, haptics]
   );
 
-  // Acción: Asignar a Álbum desde la barra inferior
+  // Acción: Asignar a Álbum desde la barra inferior (se acumula en el lote)
   const assignToAlbum = useCallback(
     async (album: AlbumItem, assetParam?: MediaAsset): Promise<boolean> => {
       const asset = assetParam || currentAsset;
       if (!asset) return false;
 
-      try {
-        haptics.impactMedium();
-        if (hasPermission && !asset.id.startsWith('sample-')) {
-          await MediaLibrary.addAssetsToAlbumAsync(
-            [asset.id],
-            album.id,
-            settings.albumActionMode === 'copy'
-          );
-        }
+      haptics.impactMedium();
+      const action: PendingBatchAction = {
+        id: `batch-album-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        type: 'album',
+        asset,
+        targetAlbum: album,
+      };
 
-        const newReviewed = new Set(reviewedIds);
-        newReviewed.add(asset.id);
-        setReviewedIds(newReviewed);
-        saveReviewedIds(Array.from(newReviewed));
-
-        setUndoStack((prev) => [
-          { type: 'album', asset, albumId: album.id, albumTitle: album.title },
-          ...prev,
-        ]);
-        incrementStats({ organized: 1, reviewed: 1 });
-
-        setAlbums((prev) =>
-          prev.map((a) => (a.id === album.id ? { ...a, assetCount: a.assetCount + 1 } : a))
-        );
-        return true;
-      } catch (err) {
-        console.warn('Error asignando elemento a álbum:', err);
-        return false;
-      }
+      setPendingBatchActions((prev) => [action, ...prev]);
+      setUndoStack((prev) => [
+        { type: 'album', asset, albumId: album.id, albumTitle: album.title },
+        ...prev,
+      ]);
+      return true;
     },
-    [currentAsset, hasPermission, settings.albumActionMode, reviewedIds, haptics, incrementStats]
+    [currentAsset, haptics]
   );
 
-  // Acción: Crear nuevo álbum y asignar
+  // Acción: Crear nuevo álbum y asignar (se acumula en el lote)
   const createNewAlbum = useCallback(
     async (albumName: string, assetParam?: MediaAsset): Promise<AlbumItem | null> => {
       const asset = assetParam || currentAsset;
@@ -531,16 +578,17 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         setAlbums((prev) => [newAlbumItem, ...prev]);
 
         if (asset) {
-          const newReviewed = new Set(reviewedIds);
-          newReviewed.add(asset.id);
-          setReviewedIds(newReviewed);
-          saveReviewedIds(Array.from(newReviewed));
-
+          const action: PendingBatchAction = {
+            id: `batch-album-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            type: 'album',
+            asset,
+            targetAlbum: newAlbumItem,
+          };
+          setPendingBatchActions((prev) => [action, ...prev]);
           setUndoStack((prev) => [
             { type: 'album', asset, albumId: newAlbumItem.id, albumTitle: newAlbumItem.title },
             ...prev,
           ]);
-          incrementStats({ organized: 1, reviewed: 1 });
         }
 
         return newAlbumItem;
@@ -549,10 +597,126 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         return null;
       }
     },
-    [currentAsset, hasPermission, settings.albumActionMode, reviewedIds, haptics, incrementStats]
+    [currentAsset, hasPermission, settings.albumActionMode, haptics]
   );
 
-  // Acción: Deshacer (Undo)
+  // Aplicar todas las acciones pendientes acumuladas en lote
+  const applyBatchChanges = useCallback(async (): Promise<{
+    success: boolean;
+    movedCount: number;
+    trashedCount: number;
+    keptCount: number;
+  }> => {
+    if (pendingBatchActions.length === 0) {
+      return { success: true, movedCount: 0, trashedCount: 0, keptCount: 0 };
+    }
+
+    setIsLoading(true);
+    try {
+      haptics.notificationSuccess();
+
+      let trashedCount = 0;
+      let bytesFreed = 0;
+      let movedCount = 0;
+      let keptCount = 0;
+
+      const newTrashList: TrashItem[] = [...trashItems];
+      const newReviewed = new Set(reviewedIds);
+      const albumGroups = new Map<string, { album: AlbumItem; assetIds: string[] }>();
+
+      for (const action of pendingBatchActions) {
+        newReviewed.add(action.asset.id);
+
+        if (action.type === 'trash') {
+          trashedCount++;
+          bytesFreed += action.asset.fileSize;
+          newTrashList.unshift({
+            asset: action.asset,
+            trashedAt: Date.now(),
+            sizeBytes: action.asset.fileSize,
+          });
+        } else if (action.type === 'keep') {
+          keptCount++;
+        } else if (action.type === 'album' && action.targetAlbum) {
+          movedCount++;
+          const albId = action.targetAlbum.id;
+          if (!albumGroups.has(albId)) {
+            albumGroups.set(albId, { album: action.targetAlbum, assetIds: [] });
+          }
+          if (!action.asset.id.startsWith('sample-')) {
+            albumGroups.get(albId)!.assetIds.push(action.asset.id);
+          }
+        }
+      }
+
+      // Ejecutar movimientos reales en MediaLibrary agrupados por álbum
+      if (hasPermission) {
+        for (const [albId, group] of albumGroups.entries()) {
+          if (group.assetIds.length > 0) {
+            try {
+              await MediaLibrary.addAssetsToAlbumAsync(
+                group.assetIds,
+                albId,
+                settings.albumActionMode === 'copy'
+              );
+            } catch (e) {
+              console.warn('Error moviendo assets al álbum en lote:', e);
+            }
+          }
+        }
+      }
+
+      setTrashItems(newTrashList);
+      await saveTrashItems(newTrashList);
+
+      setReviewedIds(newReviewed);
+      await saveReviewedIds(Array.from(newReviewed));
+
+      // Actualizar contadores de álbumes locales
+      if (albumGroups.size > 0) {
+        setAlbums((prev) =>
+          prev.map((a) => {
+            const grp = albumGroups.get(a.id);
+            return grp ? { ...a, assetCount: a.assetCount + grp.assetIds.length } : a;
+          })
+        );
+      }
+
+      // Limpiar lote pendiente
+      setPendingBatchActions([]);
+
+      // Actualizar estadísticas con seguridad de no-negativos
+      incrementStats({
+        reviewed: pendingBatchActions.length,
+        trashed: trashedCount,
+        bytesFreed: bytesFreed,
+        organized: movedCount,
+      });
+
+      return { success: true, movedCount, trashedCount, keptCount };
+    } catch (err) {
+      console.error('Error aplicando lote de cambios:', err);
+      return { success: false, movedCount: 0, trashedCount: 0, keptCount: 0 };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    pendingBatchActions,
+    trashItems,
+    reviewedIds,
+    hasPermission,
+    settings.albumActionMode,
+    incrementStats,
+    haptics,
+  ]);
+
+  // Descartar lote pendiente sin aplicar cambios
+  const discardPendingBatch = useCallback(() => {
+    haptics.impactLight();
+    setPendingBatchActions([]);
+  }, [haptics]);
+
+  // Acción: Deshacer (Undo) - compatible con lote pendiente o histórico
   const undo = useCallback(() => {
     if (undoStack.length === 0) return;
     haptics.impactLight();
@@ -560,6 +724,14 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     const [lastAction, ...remainingStack] = undoStack;
     setUndoStack(remainingStack);
 
+    // Si la acción está en el lote pendiente, retirarla
+    const isPending = pendingBatchActions.some((p) => p.asset.id === lastAction.asset.id);
+    if (isPending) {
+      setPendingBatchActions((prev) => prev.filter((p) => p.asset.id !== lastAction.asset.id));
+      return;
+    }
+
+    // Si ya había sido aplicada permanentemente:
     if (lastAction.type === 'trash') {
       const updatedTrash = trashItems.filter((t) => t.asset.id !== lastAction.asset.id);
       setTrashItems(updatedTrash);
@@ -578,7 +750,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
       saveReviewedIds(Array.from(newReviewed));
       incrementStats({ organized: -1, reviewed: -1 });
     }
-  }, [undoStack, trashItems, reviewedIds, haptics, incrementStats]);
+  }, [undoStack, pendingBatchActions, trashItems, reviewedIds, haptics, incrementStats]);
 
   // Restaurar un elemento de la papelera
   const restoreTrashItem = useCallback(
@@ -675,6 +847,11 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         albums,
         undoStack,
         canUndo,
+        pendingBatchActions,
+        pendingCount: pendingBatchActions.length,
+        batchSummary,
+        applyBatchChanges,
+        discardPendingBatch,
         requestPermission,
         setFilter,
         selectAlbumForReview,

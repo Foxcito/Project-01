@@ -13,15 +13,16 @@ import { useSettings } from '@/context/SettingsContext';
 import { GlassView } from '@/components/GlassView';
 import { formatBytes, formatNumber } from '@/utils/formatters';
 import {
-  GestureDirection,
+  KeepGestureDirection,
   SensitivityLevel,
   AlbumActionMode,
   ThemeMode,
+  TrashRetention,
+  MediaTypeFilter,
 } from '@/types/settings';
 import {
-  Sliders,
-  MoveVertical,
-  MoveHorizontal,
+  MoveLeft,
+  ArrowDown,
   Gauge,
   FolderSync,
   PlaySquare,
@@ -29,8 +30,11 @@ import {
   Vibrate,
   Moon,
   Sparkles,
-  BarChart3,
   RotateCcw,
+  Clock,
+  Layers,
+  Palette,
+  Compass,
 } from 'lucide-react-native';
 
 export default function SettingsScreen() {
@@ -39,9 +43,11 @@ export default function SettingsScreen() {
     colors,
     haptics,
     setTheme,
-    setGestureDirection,
+    setKeepGestureDirection,
     setSensitivity,
     setAlbumActionMode,
+    setTrashRetention,
+    setMediaTypeFilter,
     toggleAutoplay,
     toggleDefaultMuted,
     toggleHaptics,
@@ -60,6 +66,37 @@ export default function SettingsScreen() {
     );
   };
 
+  const THEME_OPTIONS: { id: ThemeMode; label: string; icon: any; desc: string; accentColor: string }[] = [
+    {
+      id: 'oled',
+      label: 'Negro AMOLED',
+      icon: Moon,
+      desc: 'Negro puro OLED con acento cian brillante y máxima eficiencia energética.',
+      accentColor: '#38BDF8',
+    },
+    {
+      id: 'vintage',
+      label: 'Vintage Cálido',
+      icon: Sparkles,
+      desc: 'Fotografía analógica: crema, papel lino, terracota y oliva suave.',
+      accentColor: '#C45B3E',
+    },
+    {
+      id: 'graphite',
+      label: 'Grafito Mate',
+      icon: Palette,
+      desc: 'Carbón mate sofisticado con acento ámbar cálido y contraste equilibrado.',
+      accentColor: '#F59E0B',
+    },
+    {
+      id: 'nordic',
+      label: 'Bruma Nórdica',
+      icon: Compass,
+      desc: 'Noche ártica profunda con suaves destellos de hielo glacial y azul escarchado.',
+      accentColor: '#7DD3FC',
+    },
+  ];
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <ScrollView
@@ -70,11 +107,11 @@ export default function SettingsScreen() {
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Configuración</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Personaliza el flujo de limpieza y la apariencia
+            Ajustes avanzados, gestos y personalización
           </Text>
         </View>
 
-        {/* Sección: Estadísticas Acumuladas */}
+        {/* Sección: Estadísticas Acumuladas (Estricto >= 0) */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             ESTADÍSTICAS GLOBALES
@@ -83,7 +120,7 @@ export default function SettingsScreen() {
             <View style={styles.statsGrid}>
               <View style={styles.statBox}>
                 <Text style={[styles.statValue, { color: colors.keep }]}>
-                  {formatBytes(settings.stats.totalBytesFreed)}
+                  {formatBytes(Math.max(0, settings.stats?.totalBytesFreed || 0))}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>Espacio Liberado</Text>
               </View>
@@ -92,7 +129,7 @@ export default function SettingsScreen() {
 
               <View style={styles.statBox}>
                 <Text style={[styles.statValue, { color: colors.text }]}>
-                  {formatNumber(settings.stats.totalReviewed)}
+                  {formatNumber(Math.max(0, settings.stats?.totalReviewed || 0))}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>Revisados</Text>
               </View>
@@ -101,7 +138,7 @@ export default function SettingsScreen() {
 
               <View style={styles.statBox}>
                 <Text style={[styles.statValue, { color: colors.trash }]}>
-                  {formatNumber(settings.stats.totalTrashed)}
+                  {formatNumber(Math.max(0, settings.stats?.totalTrashed || 0))}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textMuted }]}>Descartados</Text>
               </View>
@@ -120,42 +157,41 @@ export default function SettingsScreen() {
           </GlassView>
         </View>
 
-        {/* Sección: Controles y Gestos */}
+        {/* Sección: Filtro de Contenido Multimedia */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            GESTOS Y DESLIZAMIENTO
+            FILTRO DE CONTENIDO
           </Text>
           <GlassView intensity={30} borderRadius={20} style={[styles.card, { borderColor: colors.border }]}>
-            {/* Dirección del gesto */}
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  {settings.gestureDirection === 'vertical' ? (
-                    <MoveVertical size={18} color={colors.accent} />
-                  ) : (
-                    <MoveHorizontal size={18} color={colors.accent} />
-                  )}
+                  <Layers size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
-                    Eje de Deslizamiento
+                    Tipo de Archivo a Revisar
                   </Text>
                   <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
-                    {settings.gestureDirection === 'vertical'
-                      ? 'Arriba (Basura) / Abajo (Guardar)'
-                      : 'Izquierda (Basura) / Derecha (Guardar)'}
+                    Filtra la cola para fotos, videos o todo el contenido
                   </Text>
                 </View>
               </View>
 
               <View style={[styles.pillSelector, { backgroundColor: colors.surfaceSubtle }]}>
-                {(['vertical', 'horizontal'] as GestureDirection[]).map((dir) => (
+                {(
+                  [
+                    { key: 'all', label: 'Todo' },
+                    { key: 'photo', label: 'Fotos' },
+                    { key: 'video', label: 'Videos' },
+                  ] as { key: MediaTypeFilter; label: string }[]
+                ).map((opt) => (
                   <TouchableOpacity
-                    key={dir}
-                    onPress={() => setGestureDirection(dir)}
+                    key={opt.key}
+                    onPress={() => setMediaTypeFilter(opt.key)}
                     style={[
                       styles.pillOption,
-                      settings.gestureDirection === dir && [
+                      settings.mediaTypeFilter === opt.key && [
                         styles.pillOptionActive,
                         { backgroundColor: colors.surface },
                       ],
@@ -166,11 +202,77 @@ export default function SettingsScreen() {
                         styles.pillText,
                         {
                           color:
-                            settings.gestureDirection === dir ? colors.text : colors.textMuted,
+                            settings.mediaTypeFilter === opt.key ? colors.primary : colors.textMuted,
+                          fontWeight: settings.mediaTypeFilter === opt.key ? '800' : '600',
                         },
                       ]}
                     >
-                      {dir === 'vertical' ? 'Vertical' : 'Lateral'}
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </GlassView>
+        </View>
+
+        {/* Sección: Gestos y Deslizamiento */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            GESTOS Y CONTROL DE TARJETAS
+          </Text>
+          <GlassView intensity={30} borderRadius={20} style={[styles.card, { borderColor: colors.border }]}>
+            {/* Dirección de Conservar */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
+                  {settings.keepGestureDirection === 'left' ? (
+                    <MoveLeft size={18} color={colors.keep} />
+                  ) : (
+                    <ArrowDown size={18} color={colors.keep} />
+                  )}
+                </View>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.text }]}>
+                    Dirección de Conservar
+                  </Text>
+                  <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
+                    Arriba siempre descarta. Elige hacia dónde conservar.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.pillSelector, { backgroundColor: colors.surfaceSubtle }]}>
+                {(
+                  [
+                    { key: 'left', label: 'Izquierda' },
+                    { key: 'down', label: 'Abajo' },
+                  ] as { key: KeepGestureDirection; label: string }[]
+                ).map((dir) => (
+                  <TouchableOpacity
+                    key={dir.key}
+                    onPress={() => setKeepGestureDirection(dir.key)}
+                    style={[
+                      styles.pillOption,
+                      settings.keepGestureDirection === dir.key && [
+                        styles.pillOptionActive,
+                        { backgroundColor: colors.surface },
+                      ],
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.pillText,
+                        {
+                          color:
+                            settings.keepGestureDirection === dir.key
+                              ? colors.keep
+                              : colors.textMuted,
+                          fontWeight: settings.keepGestureDirection === dir.key ? '800' : '600',
+                        },
+                      ]}
+                    >
+                      {dir.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -183,14 +285,14 @@ export default function SettingsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  <Gauge size={18} color={colors.accent} />
+                  <Gauge size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
                     Sensibilidad del Gesto
                   </Text>
                   <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
-                    Distancia requerida para activar la acción
+                    Distancia y velocidad requeridas para activar swipe
                   </Text>
                 </View>
               </View>
@@ -213,10 +315,71 @@ export default function SettingsScreen() {
                         styles.pillText,
                         {
                           color: settings.sensitivity === level ? colors.text : colors.textMuted,
+                          fontWeight: settings.sensitivity === level ? '800' : '600',
                         },
                       ]}
                     >
                       {level === 'low' ? 'Baja' : level === 'medium' ? 'Media' : 'Alta'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </GlassView>
+        </View>
+
+        {/* Sección: Papelera y Retención */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            PAPELERA TOTAL Y RETENCIÓN
+          </Text>
+          <GlassView intensity={30} borderRadius={20} style={[styles.card, { borderColor: colors.border }]}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
+                  <Clock size={18} color={colors.trash} />
+                </View>
+                <View style={styles.settingTextCol}>
+                  <Text style={[styles.settingLabel, { color: colors.text }]}>
+                    Tiempo de Retención
+                  </Text>
+                  <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
+                    {settings.trashRetention === '30_days'
+                      ? 'Archivos en papelera caducan tras 30 días'
+                      : 'Ilimitada (sin caducidad automática)'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.pillSelector, { backgroundColor: colors.surfaceSubtle }]}>
+                {(
+                  [
+                    { key: '30_days', label: '30 días' },
+                    { key: 'forever', label: 'Ilimitada' },
+                  ] as { key: TrashRetention; label: string }[]
+                ).map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setTrashRetention(opt.key)}
+                    style={[
+                      styles.pillOption,
+                      settings.trashRetention === opt.key && [
+                        styles.pillOptionActive,
+                        { backgroundColor: colors.surface },
+                      ],
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.pillText,
+                        {
+                          color:
+                            settings.trashRetention === opt.key ? colors.trash : colors.textMuted,
+                          fontWeight: settings.trashRetention === opt.key ? '800' : '600',
+                        },
+                      ]}
+                    >
+                      {opt.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -234,7 +397,7 @@ export default function SettingsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  <FolderSync size={18} color={colors.accent} />
+                  <FolderSync size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
@@ -243,7 +406,7 @@ export default function SettingsScreen() {
                   <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
                     {settings.albumActionMode === 'move'
                       ? 'Mover archivo (libera espacio en origen)'
-                      : 'Copiar (mantiene el original)'}
+                      : 'Copiar (mantiene el archivo en origen)'}
                   </Text>
                 </View>
               </View>
@@ -266,6 +429,7 @@ export default function SettingsScreen() {
                         styles.pillText,
                         {
                           color: settings.albumActionMode === mode ? colors.text : colors.textMuted,
+                          fontWeight: settings.albumActionMode === mode ? '800' : '600',
                         },
                       ]}
                     >
@@ -288,7 +452,7 @@ export default function SettingsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  <PlaySquare size={18} color={colors.accent} />
+                  <PlaySquare size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
@@ -312,7 +476,7 @@ export default function SettingsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  <VolumeX size={18} color={colors.accent} />
+                  <VolumeX size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
@@ -336,14 +500,14 @@ export default function SettingsScreen() {
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <View style={[styles.iconContainer, { backgroundColor: colors.surfaceSubtle }]}>
-                  <Vibrate size={18} color={colors.accent} />
+                  <Vibrate size={18} color={colors.primary} />
                 </View>
                 <View style={styles.settingTextCol}>
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
                     Vibración Háptica
                   </Text>
                   <Text style={[styles.settingSub, { color: colors.textSecondary }]}>
-                    Retroalimentación táctil en cada swipe y acción
+                    Retroalimentación física en cada swipe y acción
                   </Text>
                 </View>
               </View>
@@ -356,39 +520,26 @@ export default function SettingsScreen() {
           </GlassView>
         </View>
 
-        {/* Sección: Tema Visual */}
+        {/* Sección: Temas Visuales (4 Temas) */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            TEMA VISUAL
+            TEMA VISUAL (4 ESTILOS DISPONIBLES)
           </Text>
           <GlassView intensity={30} borderRadius={20} style={[styles.card, { borderColor: colors.border }]}>
-            <View style={styles.themeOptionsGrid}>
-              {[
-                {
-                  id: 'oled',
-                  label: 'Negro AMOLED',
-                  icon: Moon,
-                  desc: 'Fondo negro puro, superficies de grafito y acento cian minimalista.',
-                },
-                {
-                  id: 'vintage',
-                  label: 'Vintage Cálido',
-                  icon: Sparkles,
-                  desc: 'Fotografía analógica: crema, papel lino, terracota y oliva suave.',
-                },
-              ].map((item) => {
+            <View style={styles.themeGrid}>
+              {THEME_OPTIONS.map((item) => {
                 const isSelected = settings.theme === item.id;
                 const IconComponent = item.icon;
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    onPress={() => setTheme(item.id as ThemeMode)}
+                    onPress={() => setTheme(item.id)}
                     activeOpacity={0.75}
                     style={[
                       styles.themeCard,
                       {
                         backgroundColor: isSelected ? colors.tagBg : colors.surfaceSubtle,
-                        borderColor: isSelected ? colors.primary : colors.border,
+                        borderColor: isSelected ? item.accentColor : colors.border,
                       },
                     ]}
                   >
@@ -396,13 +547,13 @@ export default function SettingsScreen() {
                       style={[
                         styles.themeIconBox,
                         {
-                          backgroundColor: isSelected ? colors.primary : colors.surface,
+                          backgroundColor: isSelected ? item.accentColor : colors.surface,
                         },
                       ]}
                     >
                       <IconComponent
                         size={20}
-                        color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                        color={isSelected ? (colors.isDark ? '#000000' : '#FFFFFF') : colors.textSecondary}
                       />
                     </View>
                     <Text
@@ -544,9 +695,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   pillOption: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   pillOptionActive: {
     shadowColor: '#000',
@@ -559,12 +710,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  themeOptionsGrid: {
+  themeGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   themeCard: {
-    flex: 1,
+    width: '48%',
     paddingVertical: 14,
     paddingHorizontal: 10,
     borderRadius: 16,
@@ -582,8 +734,11 @@ const styles = StyleSheet.create({
   themeCardLabel: {
     fontSize: 12,
     marginTop: 2,
+    textAlign: 'center',
   },
   themeCardDesc: {
     fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });

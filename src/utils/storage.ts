@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserSettings } from '@/types/settings';
+import { UserSettings, ThemeMode, KeepGestureDirection, TrashRetention, MediaTypeFilter } from '@/types/settings';
 import { TrashItem } from '@/types/media';
 
 const SETTINGS_KEY = '@foxcito_cleaner:settings';
@@ -7,9 +7,11 @@ const TRASH_KEY = '@foxcito_cleaner:trash_items';
 const REVIEWED_IDS_KEY = '@foxcito_cleaner:reviewed_ids';
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  gestureDirection: 'vertical',
+  keepGestureDirection: 'left',
   sensitivity: 'medium',
   albumActionMode: 'move',
+  trashRetention: 'forever',
+  mediaTypeFilter: 'all',
   autoplayVideos: true,
   defaultMuted: true,
   hapticFeedback: true,
@@ -22,20 +24,40 @@ export const DEFAULT_SETTINGS: UserSettings = {
   },
 };
 
+const VALID_THEMES: ThemeMode[] = ['oled', 'vintage', 'graphite', 'nordic'];
+
 export async function loadUserSettings(): Promise<UserSettings> {
   try {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
-    const normalizedTheme = parsed.theme === 'vintage' ? 'vintage' : 'oled';
+
+    const theme: ThemeMode = VALID_THEMES.includes(parsed.theme) ? parsed.theme : 'oled';
+    const keepGestureDirection: KeepGestureDirection =
+      parsed.keepGestureDirection === 'down' ? 'down' : 'left';
+    const trashRetention: TrashRetention =
+      parsed.trashRetention === '30_days' ? '30_days' : 'forever';
+    const mediaTypeFilter: MediaTypeFilter =
+      parsed.mediaTypeFilter === 'photo' || parsed.mediaTypeFilter === 'video'
+        ? parsed.mediaTypeFilter
+        : 'all';
+
+    const rawStats = parsed.stats || {};
+    const stats = {
+      totalBytesFreed: Math.max(0, Number(rawStats.totalBytesFreed) || 0),
+      totalReviewed: Math.max(0, Number(rawStats.totalReviewed) || 0),
+      totalTrashed: Math.max(0, Number(rawStats.totalTrashed) || 0),
+      totalOrganized: Math.max(0, Number(rawStats.totalOrganized) || 0),
+    };
+
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
-      theme: normalizedTheme,
-      stats: {
-        ...DEFAULT_SETTINGS.stats,
-        ...(parsed.stats || {}),
-      },
+      theme,
+      keepGestureDirection,
+      trashRetention,
+      mediaTypeFilter,
+      stats,
     };
   } catch (err) {
     console.error('Error loading user settings from AsyncStorage:', err);
@@ -45,7 +67,17 @@ export async function loadUserSettings(): Promise<UserSettings> {
 
 export async function saveUserSettings(settings: UserSettings): Promise<void> {
   try {
-    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // Asegurar que las estadísticas nunca se guarden con números negativos
+    const safeSettings: UserSettings = {
+      ...settings,
+      stats: {
+        totalBytesFreed: Math.max(0, settings.stats.totalBytesFreed || 0),
+        totalReviewed: Math.max(0, settings.stats.totalReviewed || 0),
+        totalTrashed: Math.max(0, settings.stats.totalTrashed || 0),
+        totalOrganized: Math.max(0, settings.stats.totalOrganized || 0),
+      },
+    };
+    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(safeSettings));
   } catch (err) {
     console.error('Error saving user settings to AsyncStorage:', err);
   }

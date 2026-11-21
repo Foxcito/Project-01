@@ -14,15 +14,17 @@ import { FILTER_OPTIONS } from '@/constants/filters';
 import {
   RotateCcw,
   ChevronDown,
-  Trash2,
   SlidersHorizontal,
-  Moon,
-  Sparkles,
+  CheckCheck,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 
-export function TopHeader() {
-  const { colors, haptics, settings, toggleTheme } = useSettings();
+interface TopHeaderProps {
+  onOpenBatchSummary?: () => void;
+}
+
+export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
+  const { colors, haptics, settings } = useSettings();
   const {
     activeFilter,
     selectedAlbum,
@@ -30,7 +32,7 @@ export function TopHeader() {
     currentIndex,
     totalInQueue,
     currentAsset,
-    trashCount,
+    pendingCount,
     undo,
     canUndo,
     undoStack,
@@ -48,8 +50,8 @@ export function TopHeader() {
   // Fecha legible del archivo actual
   const dateFormatted = currentAsset ? formatDateMonthYear(currentAsset.creationTime) : '';
 
-  // Espacio total liberado acumulado
-  const freedFormatted = formatBytes(settings.stats.totalBytesFreed);
+  // Espacio total liberado acumulado (asegurado no negativo)
+  const freedFormatted = formatBytes(Math.max(0, settings.stats?.totalBytesFreed || 0));
 
   return (
     <View style={styles.container}>
@@ -105,40 +107,34 @@ export function TopHeader() {
             <ChevronDown size={14} color={colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Acciones Derecha: Alternar Tema Rápido + Papelera + Ajustes */}
+          {/* Acciones Derecha: Botón Lote ¡Listo! (si hay pendientes) + Ajustes */}
           <View style={styles.rightActions}>
-            {/* Alternador Rápido de Tema (Negro AMOLED vs Vintage Cálido) */}
-            <TouchableOpacity
-              onPress={toggleTheme}
-              activeOpacity={0.7}
-              style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
-              accessibilityLabel="Alternar Tema"
-            >
-              {settings.theme === 'oled' ? (
-                <Sparkles size={17} color={colors.accent} />
-              ) : (
-                <Moon size={17} color={colors.primary} />
-              )}
-            </TouchableOpacity>
-
-            {/* Acceso a Papelera */}
-            <TouchableOpacity
-              onPress={() => {
-                haptics.selection();
-                router.push('/trash');
-              }}
-              activeOpacity={0.7}
-              style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
-            >
-              <Trash2 size={17} color={colors.textSecondary} />
-              {trashCount > 0 && (
-                <View style={[styles.trashBadge, { backgroundColor: colors.trash }]}>
-                  <Text style={styles.trashBadgeText}>
-                    {trashCount > 99 ? '99+' : trashCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {/* Botón ¡Listo! de Lote Pendiente */}
+            {pendingCount > 0 && onOpenBatchSummary && (
+              <TouchableOpacity
+                onPress={() => {
+                  haptics.impactMedium();
+                  onOpenBatchSummary();
+                }}
+                activeOpacity={0.8}
+                style={[
+                  styles.batchBtn,
+                  {
+                    backgroundColor: colors.primary,
+                  },
+                ]}
+              >
+                <CheckCheck size={14} color={colors.isDark ? '#000000' : '#FFFFFF'} />
+                <Text
+                  style={[
+                    styles.batchBtnText,
+                    { color: colors.isDark ? '#000000' : '#FFFFFF' },
+                  ]}
+                >
+                  ¡Listo! ({pendingCount})
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Ajustes */}
             <TouchableOpacity
@@ -225,22 +221,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
   },
-  trashBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 17,
-    height: 17,
-    borderRadius: 8.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-  },
-  trashBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
-  },
   filterSelector: {
     flex: 1,
     height: 36,
@@ -262,6 +242,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  batchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 17,
+    gap: 5,
+  },
+  batchBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   statsRow: {
     flexDirection: 'row',

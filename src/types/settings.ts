@@ -1,10 +1,12 @@
-export type GestureDirection = 'vertical' | 'horizontal';
-// 'vertical': Deslizar arriba = Papelera, Deslizar abajo = Conservar
-// 'horizontal': Deslizar izquierda = Papelera, Deslizar derecha = Conservar
+export type KeepGestureDirection = 'left' | 'down';
+// Deslizar arriba = Papelera (siempre)
+// Deslizar según keepGestureDirection: 'left' (por defecto) o 'down' = Conservar
 
 export type SensitivityLevel = 'low' | 'medium' | 'high';
 export type AlbumActionMode = 'move' | 'copy';
-export type ThemeMode = 'oled' | 'vintage';
+export type ThemeMode = 'oled' | 'vintage' | 'graphite' | 'nordic';
+export type TrashRetention = '30_days' | 'forever';
+export type MediaTypeFilter = 'all' | 'photo' | 'video';
 
 export interface UserStats {
   totalBytesFreed: number;
@@ -14,9 +16,11 @@ export interface UserStats {
 }
 
 export interface UserSettings {
-  gestureDirection: GestureDirection;
+  keepGestureDirection: KeepGestureDirection;
   sensitivity: SensitivityLevel;
   albumActionMode: AlbumActionMode;
+  trashRetention: TrashRetention;
+  mediaTypeFilter: MediaTypeFilter;
   autoplayVideos: boolean;
   defaultMuted: boolean;
   hapticFeedback: boolean;
