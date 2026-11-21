@@ -51,6 +51,7 @@ export function CardStack() {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const isProcessing = useSharedValue(false);
+  const isCardZoomed = useSharedValue(false);
 
   // Valores de configuración
   const keepDirection = settings.keepGestureDirection || 'left';
@@ -64,13 +65,14 @@ export function CardStack() {
       translateX.value = 0;
       translateY.value = 0;
       isProcessing.value = false;
+      isCardZoomed.value = false;
       if (action === 'keep') {
         markAsKept();
       } else {
         moveToTrash();
       }
     },
-    [markAsKept, moveToTrash, translateX, translateY, isProcessing]
+    [markAsKept, moveToTrash, translateX, translateY, isProcessing, isCardZoomed]
   );
 
   // Disparar acción programáticamente
@@ -101,9 +103,11 @@ export function CardStack() {
   );
 
   const panGesture = Gesture.Pan()
+    .minPointers(1)
+    .maxPointers(1)
     .onUpdate((event) => {
       'worklet';
-      if (isProcessing.value) return;
+      if (isProcessing.value || isCardZoomed.value) return;
 
       if (isKeepLeft) {
         // Arriba (trash) y Izquierda (keep) son las direcciones activas
@@ -118,7 +122,7 @@ export function CardStack() {
     })
     .onEnd((event) => {
       'worklet';
-      if (isProcessing.value) return;
+      if (isProcessing.value || isCardZoomed.value) return;
 
       // Deslizar ARRIBA: Papelera siempre
       if (event.translationY < -threshold || event.velocityY < -600) {
@@ -230,7 +234,13 @@ export function CardStack() {
         {/* Tarjeta frontal activa con física interactiva */}
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.cardContainer, topCardAnimatedStyle]}>
-            <MediaCard asset={currentAsset} isActive={true} />
+            <MediaCard
+              asset={currentAsset}
+              isActive={true}
+              onZoomChange={(zoomed) => {
+                isCardZoomed.value = zoomed;
+              }}
+            />
 
             {/* Etiqueta dinámica: DESCARTAR (Arriba) */}
             <Animated.View

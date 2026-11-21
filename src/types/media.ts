@@ -68,3 +68,13 @@ export interface BatchSummary {
   keptAssets: MediaAsset[];
   totalActions: number;
 }
+
+export type ActiveSourceType = 'filter' | 'period' | 'album';
+
+export interface SourceProgress {
+  sourceKey: string;
+  lastAssetId: string;
+  lastIndex: number;
+  updatedAt: number;
+}
+

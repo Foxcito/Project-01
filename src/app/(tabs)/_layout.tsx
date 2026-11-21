@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet, View, Text, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSettings } from '@/context/SettingsContext';
 import { useMedia } from '@/context/MediaContext';
-import { Layers, Folder, Trash2, Sliders } from 'lucide-react-native';
+import { LayoutGrid, Layers, Trash2, Sliders } from 'lucide-react-native';
 
 export default function TabsLayout() {
   const { colors } = useSettings();
@@ -35,18 +35,18 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Revisión',
+          title: 'Inicio',
           tabBarIcon: ({ color, focused }) => (
-            <Layers size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
+            <LayoutGrid size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
           ),
         }}
       />
       <Tabs.Screen
-        name="albums"
+        name="review"
         options={{
-          title: 'Álbumes',
+          title: 'Revisión',
           tabBarIcon: ({ color, focused }) => (
-            <Folder size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
+            <Layers size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
           ),
         }}
       />
@@ -76,6 +76,12 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <Sliders size={22} color={color} strokeWidth={focused ? 2.4 : 1.8} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="albums"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

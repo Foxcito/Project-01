@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserSettings, ThemeMode, KeepGestureDirection, TrashRetention, MediaTypeFilter } from '@/types/settings';
-import { TrashItem } from '@/types/media';
+import { TrashItem, SourceProgress } from '@/types/media';
 
 const SETTINGS_KEY = '@foxcito_cleaner:settings';
 const TRASH_KEY = '@foxcito_cleaner:trash_items';
@@ -120,3 +120,27 @@ export async function saveReviewedIds(ids: string[]): Promise<void> {
     console.error('Error saving reviewed IDs to AsyncStorage:', err);
   }
 }
+
+const SOURCE_PROGRESS_KEY = '@foxcito_cleaner:source_progress';
+
+export async function loadSourceProgress(): Promise<Record<string, SourceProgress>> {
+  try {
+    const raw = await AsyncStorage.getItem(SOURCE_PROGRESS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Error loading source progress from AsyncStorage:', err);
+    return {};
+  }
+}
+
+export async function saveSourceProgress(
+  progress: Record<string, SourceProgress>
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SOURCE_PROGRESS_KEY, JSON.stringify(progress));
+  } catch (err) {
+    console.error('Error saving source progress to AsyncStorage:', err);
+  }
+}
+

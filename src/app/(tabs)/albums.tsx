@@ -44,13 +44,13 @@ export default function AlbumsScreen() {
   const handleReviewPeriod = (period: TimePeriodGroup) => {
     haptics.impactLight();
     selectPeriodForReview(period);
-    router.replace('/');
+    router.push('/(tabs)/review');
   };
 
   const handleReviewAlbum = (album: AlbumItem) => {
     haptics.impactLight();
     selectAlbumForReview(album);
-    router.replace('/');
+    router.push('/(tabs)/review');
   };
 
   // Renderizador para tarjetas de meses/años

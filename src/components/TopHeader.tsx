@@ -8,27 +8,31 @@ import {
 import { useMedia } from '@/context/MediaContext';
 import { useSettings } from '@/context/SettingsContext';
 import { FilterModal } from './FilterModal';
+import { SourceGridModal } from './SourceGridModal';
 import { GlassView } from './GlassView';
 import { formatDateMonthYear, formatBytes } from '@/utils/formatters';
-import { FILTER_OPTIONS } from '@/constants/filters';
 import {
   RotateCcw,
   ChevronDown,
   SlidersHorizontal,
   CheckCheck,
+  Calendar,
+  Folder,
+  Layers,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 interface TopHeaderProps {
   onOpenBatchSummary?: () => void;
+  showBackButton?: boolean;
 }
 
-export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
+export function TopHeader({ onOpenBatchSummary, showBackButton }: TopHeaderProps) {
   const { colors, haptics, settings } = useSettings();
   const {
-    activeFilter,
-    selectedAlbum,
-    selectedPeriod,
+    activeSourceTitle,
+    activeSourceType,
     currentIndex,
     totalInQueue,
     currentAsset,
@@ -38,20 +42,26 @@ export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
     undoStack,
   } = useMedia();
 
+  const [sourceGridVisible, setSourceGridVisible] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-
-  // Etiqueta del filtro, período o álbum activo
-  const filterLabel = selectedPeriod
-    ? selectedPeriod.label
-    : selectedAlbum
-    ? selectedAlbum.title
-    : FILTER_OPTIONS.find((f) => f.id === activeFilter)?.label || 'Sin ordenar';
 
   // Fecha legible del archivo actual
   const dateFormatted = currentAsset ? formatDateMonthYear(currentAsset.creationTime) : '';
 
   // Espacio total liberado acumulado (asegurado no negativo)
   const freedFormatted = formatBytes(Math.max(0, settings.stats?.totalBytesFreed || 0));
+
+  const renderSourceIcon = () => {
+    switch (activeSourceType) {
+      case 'period':
+        return <Calendar size={13} color={colors.primary} />;
+      case 'album':
+        return <Folder size={13} color={colors.accent} />;
+      case 'filter':
+      default:
+        return <Layers size={13} color={colors.primary} />;
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -61,36 +71,49 @@ export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
         style={[styles.headerCard, { borderColor: colors.border }]}
       >
         <View style={styles.topRow}>
-          {/* Botón Deshacer (Undo) */}
-          <TouchableOpacity
-            onPress={undo}
-            disabled={!canUndo}
-            activeOpacity={0.7}
-            style={[
-              styles.iconBtn,
-              {
-                backgroundColor: canUndo ? 'rgba(245, 158, 11, 0.15)' : colors.surfaceSubtle,
-                borderColor: canUndo ? colors.amber : 'transparent',
-              },
-            ]}
-          >
-            <RotateCcw
-              size={17}
-              color={canUndo ? colors.amber : colors.textMuted}
-              strokeWidth={2.2}
-            />
-            {canUndo && (
-              <View style={[styles.undoBadge, { backgroundColor: colors.amber }]}>
-                <Text style={styles.undoBadgeText}>{undoStack.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {/* Botón Volver o Deshacer */}
+          {showBackButton ? (
+            <TouchableOpacity
+              onPress={() => {
+                haptics.selection();
+                router.back();
+              }}
+              activeOpacity={0.7}
+              style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
+            >
+              <ArrowLeft size={18} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={undo}
+              disabled={!canUndo}
+              activeOpacity={0.7}
+              style={[
+                styles.iconBtn,
+                {
+                  backgroundColor: canUndo ? 'rgba(245, 158, 11, 0.15)' : colors.surfaceSubtle,
+                  borderColor: canUndo ? colors.amber : 'transparent',
+                },
+              ]}
+            >
+              <RotateCcw
+                size={17}
+                color={canUndo ? colors.amber : colors.textMuted}
+                strokeWidth={2.2}
+              />
+              {canUndo && (
+                <View style={[styles.undoBadge, { backgroundColor: colors.amber }]}>
+                  <Text style={styles.undoBadgeText}>{undoStack.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
 
-          {/* Selector de Filtro / Período / Álbum Central */}
+          {/* Selector de Origen Central (NUNCA VACÍO - Abre Cuadrícula de Miniaturas) */}
           <TouchableOpacity
             onPress={() => {
               haptics.selection();
-              setFilterModalVisible(true);
+              setSourceGridVisible(true);
             }}
             activeOpacity={0.8}
             style={[
@@ -98,17 +121,35 @@ export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
               { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
             ]}
           >
+            {renderSourceIcon()}
             <Text
               style={[styles.filterText, { color: colors.text }]}
               numberOfLines={1}
             >
-              {filterLabel}
+              {activeSourceTitle || 'Sin ordenar'}
             </Text>
             <ChevronDown size={14} color={colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Acciones Derecha: Botón Lote ¡Listo! (si hay pendientes) + Ajustes */}
+          {/* Acciones Derecha: Botón Lote ¡Listo! + Ajustes */}
           <View style={styles.rightActions}>
+            {/* Si showBackButton es true, dejamos el botón Deshacer a la derecha antes de Ajustes */}
+            {showBackButton && canUndo && (
+              <TouchableOpacity
+                onPress={undo}
+                activeOpacity={0.7}
+                style={[
+                  styles.iconBtn,
+                  {
+                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                    borderColor: colors.amber,
+                  },
+                ]}
+              >
+                <RotateCcw size={16} color={colors.amber} strokeWidth={2.2} />
+              </TouchableOpacity>
+            )}
+
             {/* Botón ¡Listo! de Lote Pendiente */}
             {pendingCount > 0 && onOpenBatchSummary && (
               <TouchableOpacity
@@ -169,6 +210,14 @@ export function TopHeader({ onOpenBatchSummary }: TopHeaderProps) {
         </View>
       </GlassView>
 
+      {/* Modal de Cuadrícula de Miniaturas del origen activo */}
+      <SourceGridModal
+        visible={sourceGridVisible}
+        onClose={() => setSourceGridVisible(false)}
+        onChangeSource={() => setFilterModalVisible(true)}
+      />
+
+      {/* Modal para cambiar origen (Filtros, Meses o Carpetas) */}
       <FilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}

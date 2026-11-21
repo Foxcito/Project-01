@@ -10,9 +10,18 @@ import {
   TimePeriodGroup,
   PendingBatchAction,
   BatchSummary,
+  ActiveSourceType,
+  SourceProgress,
 } from '@/types/media';
-import { loadTrashItems, saveTrashItems, loadReviewedIds, saveReviewedIds } from '@/utils/storage';
-import { formatMonthYearFull } from '@/utils/formatters';
+import {
+  loadTrashItems,
+  saveTrashItems,
+  loadReviewedIds,
+  saveReviewedIds,
+  loadSourceProgress,
+  saveSourceProgress,
+} from '@/utils/storage';
+import { formatMonthYearFull, formatBytes } from '@/utils/formatters';
 import { useSettings } from './SettingsContext';
 
 interface MediaContextValue {
@@ -21,6 +30,10 @@ interface MediaContextValue {
   activeFilter: FilterType;
   selectedAlbum: AlbumItem | null;
   selectedPeriod: TimePeriodGroup | null;
+  activeSourceTitle: string;
+  activeSourceSubtitle: string;
+  activeSourceType: ActiveSourceType;
+  filterCounts: Record<FilterType, number>;
   timePeriods: TimePeriodGroup[];
   cameraAlbum: AlbumItem;
   otherAlbums: AlbumItem[];
@@ -41,6 +54,12 @@ interface MediaContextValue {
   batchSummary: BatchSummary;
   applyBatchChanges: () => Promise<{ success: boolean; movedCount: number; trashedCount: number; keptCount: number }>;
   discardPendingBatch: () => void;
+  // Navegación por miniatura y progreso por asset.id
+  jumpToAssetIndex: (index: number) => void;
+  jumpToAssetId: (assetId: string) => void;
+  resumeLastReviewed: () => void;
+  lastReviewedAssetId: string | null;
+  hasLastReviewedProgress: boolean;
   // Acciones
   requestPermission: () => Promise<boolean>;
   setFilter: (filter: FilterType) => void;
@@ -174,6 +193,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [pendingBatchActions, setPendingBatchActions] = useState<PendingBatchAction[]>([]);
+  const [sourceProgressMap, setSourceProgressMap] = useState<Record<string, SourceProgress>>({});
 
   // Filtros activos y selecciones
   const [activeFilter, setActiveFilter] = useState<FilterType>('unorganized');
@@ -198,6 +218,9 @@ export function MediaProvider({ children }: { children: ReactNode }) {
 
       const storedReviewed = await loadReviewedIds();
       setReviewedIds(new Set(storedReviewed));
+
+      const storedProgress = await loadSourceProgress();
+      setSourceProgressMap(storedProgress);
     })();
   }, [settings.trashRetention]);
 
@@ -425,6 +448,141 @@ export function MediaProvider({ children }: { children: ReactNode }) {
 
     return list;
   }, [rawAssets, trashItems, reviewedIds, pendingBatchActions, settings.mediaTypeFilter, selectedPeriod, selectedAlbum, activeFilter]);
+
+  const getSourceKey = useCallback(
+    (period = selectedPeriod, album = selectedAlbum, filter = activeFilter): string => {
+      if (period) return `period_${period.key}`;
+      if (album) return `album_${album.id}`;
+      return `filter_${filter}`;
+    },
+    [selectedPeriod, selectedAlbum, activeFilter]
+  );
+
+  const activeSourceTitle = useMemo(() => {
+    if (selectedPeriod) {
+      return selectedPeriod.label;
+    }
+    if (selectedAlbum) {
+      return selectedAlbum.title;
+    }
+    switch (activeFilter) {
+      case 'unorganized':
+        return 'Sin ordenar';
+      case 'recent':
+        return 'Más recientes';
+      case 'heavy_videos':
+        return 'Videos pesados';
+      case 'random':
+        return 'Aleatorio';
+      case 'all':
+        return 'Todos los elementos';
+      default:
+        return 'Sin ordenar';
+    }
+  }, [selectedPeriod, selectedAlbum, activeFilter]);
+
+  const activeSourceSubtitle = useMemo(() => {
+    if (selectedPeriod) {
+      return `${selectedPeriod.count} elementos · ${formatBytes(selectedPeriod.totalBytes)}`;
+    }
+    if (selectedAlbum) {
+      return `${selectedAlbum.assetCount} archivos organizados`;
+    }
+    return `${queue.length} archivos en cola`;
+  }, [selectedPeriod, selectedAlbum, queue.length]);
+
+  const activeSourceType = useMemo<ActiveSourceType>(() => {
+    if (selectedPeriod) return 'period';
+    if (selectedAlbum) return 'album';
+    return 'filter';
+  }, [selectedPeriod, selectedAlbum]);
+
+  const filterCounts = useMemo<Record<FilterType, number>>(() => {
+    const trashedIds = new Set(trashItems.map((t) => t.asset.id));
+    const pendingIds = new Set(pendingBatchActions.map((p) => p.asset.id));
+    const available = rawAssets.filter((a) => !trashedIds.has(a.id) && !pendingIds.has(a.id));
+
+    return {
+      unorganized: available.filter((a) => !a.albumId || a.albumId === 'Camera' || a.albumTitle === 'Cámara').length,
+      recent: available.length,
+      heavy_videos: available.filter((a) => a.mediaType === 'video').length,
+      random: available.length,
+      all: available.length,
+    };
+  }, [rawAssets, trashItems, pendingBatchActions]);
+
+  // Asegurar que currentIndex no supere la longitud de la cola si cambia
+  useEffect(() => {
+    if (queue.length > 0 && currentIndex >= queue.length) {
+      setCurrentIndex(queue.length - 1);
+    }
+  }, [queue.length, currentIndex]);
+
+  const currentSourceKey = getSourceKey();
+  const savedProgress = sourceProgressMap[currentSourceKey];
+  const lastReviewedAssetId = savedProgress?.lastAssetId || null;
+  const hasLastReviewedProgress = Boolean(
+    savedProgress && queue.some((a) => a.id === savedProgress.lastAssetId)
+  );
+
+  const saveProgress = useCallback(
+    (key: string, assetId: string, index: number) => {
+      const prog: SourceProgress = {
+        sourceKey: key,
+        lastAssetId: assetId,
+        lastIndex: index,
+        updatedAt: Date.now(),
+      };
+      setSourceProgressMap((prev) => {
+        const next = { ...prev, [key]: prog };
+        saveSourceProgress(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const jumpToAssetIndex = useCallback(
+    (index: number) => {
+      if (index >= 0 && index < queue.length) {
+        setCurrentIndex(index);
+        const asset = queue[index];
+        if (asset) {
+          saveProgress(getSourceKey(), asset.id, index);
+        }
+        haptics.selection();
+      }
+    },
+    [queue, getSourceKey, saveProgress, haptics]
+  );
+
+  const jumpToAssetId = useCallback(
+    (assetId: string) => {
+      const idx = queue.findIndex((a) => a.id === assetId);
+      if (idx >= 0) {
+        jumpToAssetIndex(idx);
+      }
+    },
+    [queue, jumpToAssetIndex]
+  );
+
+  const resumeLastReviewed = useCallback(() => {
+    if (lastReviewedAssetId) {
+      jumpToAssetId(lastReviewedAssetId);
+    }
+  }, [lastReviewedAssetId, jumpToAssetId]);
+
+  const restoreProgressForSource = useCallback(
+    (targetKey: string) => {
+      const prog = sourceProgressMap[targetKey];
+      if (prog) {
+        setCurrentIndex(Math.max(0, prog.lastIndex));
+      } else {
+        setCurrentIndex(0);
+      }
+    },
+    [sourceProgressMap]
+  );
 
   const currentAsset = queue[currentIndex] || null;
   const totalInQueue = queue.length;
@@ -810,20 +968,28 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     setSelectedAlbum(null);
     setSelectedPeriod(null);
     setActiveFilter(filter);
-    setCurrentIndex(0);
-  }, []);
+    restoreProgressForSource(`filter_${filter}`);
+  }, [restoreProgressForSource]);
 
   const selectAlbumForReview = useCallback((album: AlbumItem | null) => {
     setSelectedAlbum(album);
     setSelectedPeriod(null);
-    setCurrentIndex(0);
-  }, []);
+    if (album) {
+      restoreProgressForSource(`album_${album.id}`);
+    } else {
+      setCurrentIndex(0);
+    }
+  }, [restoreProgressForSource]);
 
   const selectPeriodForReview = useCallback((period: TimePeriodGroup | null) => {
     setSelectedPeriod(period);
     setSelectedAlbum(null);
-    setCurrentIndex(0);
-  }, []);
+    if (period) {
+      restoreProgressForSource(`period_${period.key}`);
+    } else {
+      setCurrentIndex(0);
+    }
+  }, [restoreProgressForSource]);
 
   return (
     <MediaContext.Provider
@@ -833,6 +999,10 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         activeFilter,
         selectedAlbum,
         selectedPeriod,
+        activeSourceTitle,
+        activeSourceSubtitle,
+        activeSourceType,
+        filterCounts,
         timePeriods,
         cameraAlbum,
         otherAlbums,
@@ -852,6 +1022,11 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         batchSummary,
         applyBatchChanges,
         discardPendingBatch,
+        jumpToAssetIndex,
+        jumpToAssetId,
+        resumeLastReviewed,
+        lastReviewedAssetId,
+        hasLastReviewedProgress,
         requestPermission,
         setFilter,
         selectAlbumForReview,
