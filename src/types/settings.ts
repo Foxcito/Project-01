@@ -4,7 +4,7 @@ export type GestureDirection = 'vertical' | 'horizontal';
 
 export type SensitivityLevel = 'low' | 'medium' | 'high';
 export type AlbumActionMode = 'move' | 'copy';
-export type ThemeMode = 'oled' | 'glass_dark' | 'light';
+export type ThemeMode = 'oled' | 'vintage';
 
 export interface UserStats {
   totalBytesFreed: number;

@@ -16,18 +16,19 @@ import {
   ChevronDown,
   Trash2,
   SlidersHorizontal,
+  Moon,
+  Sparkles,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export function TopHeader() {
-  const { colors, haptics, settings } = useSettings();
+  const { colors, haptics, settings, toggleTheme } = useSettings();
   const {
     activeFilter,
     selectedAlbum,
-    setFilter,
+    selectedPeriod,
     currentIndex,
     totalInQueue,
-    reviewedCount,
     currentAsset,
     trashCount,
     undo,
@@ -37,21 +38,23 @@ export function TopHeader() {
 
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // Etiqueta del filtro o álbum activo
-  const filterLabel = selectedAlbum
+  // Etiqueta del filtro, período o álbum activo
+  const filterLabel = selectedPeriod
+    ? selectedPeriod.label
+    : selectedAlbum
     ? selectedAlbum.title
     : FILTER_OPTIONS.find((f) => f.id === activeFilter)?.label || 'Sin ordenar';
 
-  // Fecha legible
+  // Fecha legible del archivo actual
   const dateFormatted = currentAsset ? formatDateMonthYear(currentAsset.creationTime) : '';
 
-  // Espacio total liberado acumulado en sesión
+  // Espacio total liberado acumulado
   const freedFormatted = formatBytes(settings.stats.totalBytesFreed);
 
   return (
     <View style={styles.container}>
       <GlassView
-        intensity={28}
+        intensity={35}
         borderRadius={24}
         style={[styles.headerCard, { borderColor: colors.border }]}
       >
@@ -64,13 +67,13 @@ export function TopHeader() {
             style={[
               styles.iconBtn,
               {
-                backgroundColor: canUndo ? 'rgba(255, 159, 10, 0.15)' : colors.surfaceSubtle,
+                backgroundColor: canUndo ? 'rgba(245, 158, 11, 0.15)' : colors.surfaceSubtle,
                 borderColor: canUndo ? colors.amber : 'transparent',
               },
             ]}
           >
             <RotateCcw
-              size={18}
+              size={17}
               color={canUndo ? colors.amber : colors.textMuted}
               strokeWidth={2.2}
             />
@@ -81,14 +84,17 @@ export function TopHeader() {
             )}
           </TouchableOpacity>
 
-          {/* Selector de Filtro / Álbum Central */}
+          {/* Selector de Filtro / Período / Álbum Central */}
           <TouchableOpacity
             onPress={() => {
               haptics.selection();
               setFilterModalVisible(true);
             }}
             activeOpacity={0.8}
-            style={[styles.filterSelector, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}
+            style={[
+              styles.filterSelector,
+              { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+            ]}
           >
             <Text
               style={[styles.filterText, { color: colors.text }]}
@@ -96,11 +102,26 @@ export function TopHeader() {
             >
               {filterLabel}
             </Text>
-            <ChevronDown size={15} color={colors.accent} strokeWidth={2.5} />
+            <ChevronDown size={14} color={colors.primary} strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Iconos Derecha: Papelera con Badge + Configuración */}
+          {/* Acciones Derecha: Alternar Tema Rápido + Papelera + Ajustes */}
           <View style={styles.rightActions}>
+            {/* Alternador Rápido de Tema (Negro AMOLED vs Vintage Cálido) */}
+            <TouchableOpacity
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+              style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
+              accessibilityLabel="Alternar Tema"
+            >
+              {settings.theme === 'oled' ? (
+                <Sparkles size={17} color={colors.accent} />
+              ) : (
+                <Moon size={17} color={colors.primary} />
+              )}
+            </TouchableOpacity>
+
+            {/* Acceso a Papelera */}
             <TouchableOpacity
               onPress={() => {
                 haptics.selection();
@@ -109,7 +130,7 @@ export function TopHeader() {
               activeOpacity={0.7}
               style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
             >
-              <Trash2 size={18} color={colors.textSecondary} />
+              <Trash2 size={17} color={colors.textSecondary} />
               {trashCount > 0 && (
                 <View style={[styles.trashBadge, { backgroundColor: colors.trash }]}>
                   <Text style={styles.trashBadgeText}>
@@ -119,6 +140,7 @@ export function TopHeader() {
               )}
             </TouchableOpacity>
 
+            {/* Ajustes */}
             <TouchableOpacity
               onPress={() => {
                 haptics.selection();
@@ -127,12 +149,12 @@ export function TopHeader() {
               activeOpacity={0.7}
               style={[styles.iconBtn, { backgroundColor: colors.surfaceSubtle }]}
             >
-              <SlidersHorizontal size={18} color={colors.textSecondary} />
+              <SlidersHorizontal size={17} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Fila de Progreso y Estadísticas */}
+        {/* Fila Inferior: Contador de Progreso y Espacio Liberado */}
         <View style={styles.statsRow}>
           <Text style={[styles.counterText, { color: colors.textSecondary }]}>
             <Text style={[styles.highlightNumber, { color: colors.text }]}>
@@ -153,8 +175,6 @@ export function TopHeader() {
 
       <FilterModal
         visible={filterModalVisible}
-        activeFilter={activeFilter}
-        onSelect={setFilter}
         onClose={() => setFilterModalVisible(false)}
       />
     </View>
@@ -164,13 +184,14 @@ export function TopHeader() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingTop: 6,
+    paddingBottom: 4,
     zIndex: 50,
   },
   headerCard: {
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
   },
   topRow: {
     flexDirection: 'row',
@@ -179,9 +200,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -192,12 +213,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -3,
     right: -3,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 7.5,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
   },
   undoBadgeText: {
     color: '#000000',
@@ -208,14 +229,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 8.5,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 1.5,
-    borderColor: '#000000',
+    paddingHorizontal: 3,
   },
   trashBadgeText: {
     color: '#FFFFFF',
@@ -224,25 +243,25 @@ const styles = StyleSheet.create({
   },
   filterSelector: {
     flex: 1,
-    height: 38,
-    borderRadius: 19,
+    height: 36,
+    borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     gap: 6,
     borderWidth: 1,
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.2,
-    maxWidth: 150,
+    maxWidth: 130,
   },
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   statsRow: {
     flexDirection: 'row',
@@ -256,7 +275,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   highlightNumber: {
-    fontWeight: '700',
+    fontWeight: '800',
     fontSize: 13,
   },
   freedContainer: {

@@ -11,6 +11,7 @@ interface SettingsContextValue {
   haptics: ReturnType<typeof useHaptics>;
   updateSetting: <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => Promise<void>;
   setTheme: (theme: ThemeMode) => Promise<void>;
+  toggleTheme: () => Promise<void>;
   setGestureDirection: (direction: GestureDirection) => Promise<void>;
   setSensitivity: (sensitivity: SensitivityLevel) => Promise<void>;
   setAlbumActionMode: (mode: AlbumActionMode) => Promise<void>;
@@ -55,6 +56,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     await updateSetting('theme', theme);
     haptics.selection();
   }, [updateSetting, haptics]);
+
+  const toggleTheme = useCallback(async () => {
+    const nextTheme: ThemeMode = settings.theme === 'oled' ? 'vintage' : 'oled';
+    await setTheme(nextTheme);
+  }, [settings.theme, setTheme]);
 
   const setGestureDirection = useCallback(async (direction: GestureDirection) => {
     await updateSetting('gestureDirection', direction);
@@ -140,6 +146,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         haptics,
         updateSetting,
         setTheme,
+        toggleTheme,
         setGestureDirection,
         setSensitivity,
         setAlbumActionMode,

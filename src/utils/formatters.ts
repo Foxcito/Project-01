@@ -8,11 +8,31 @@ export function formatBytes(bytes: number, decimals: number = 1): string {
   return `${val} ${sizes[i] || 'B'}`;
 }
 
+const MONTHS_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTHS_FULL = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
 export function formatDateMonthYear(timestampMs: number): string {
   if (!timestampMs) return '';
   const date = new Date(timestampMs);
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  return `${months[date.getMonth()]} ${date.getFullYear()}`;
+  return `${MONTHS_SHORT[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function formatMonthYearFull(year: number, month: number): string {
+  return `${MONTHS_FULL[month] || ''} ${year}`;
+}
+
+export function formatDateTime(timestampMs: number): string {
+  if (!timestampMs) return '';
+  const date = new Date(timestampMs);
+  const day = date.getDate();
+  const month = MONTHS_SHORT[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  return `${day} ${month} ${year} · ${hours}:${minutes}`;
 }
 
 export function formatDuration(seconds: number): string {

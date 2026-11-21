@@ -22,6 +22,16 @@ export interface AlbumItem {
   isCustom?: boolean;
 }
 
+export interface TimePeriodGroup {
+  key: string;       // e.g. "2026-10"
+  label: string;     // e.g. "Octubre 2026"
+  year: number;
+  month: number;     // 0-indexed (0 = Enero, 11 = Diciembre)
+  count: number;
+  sampleUri?: string;
+  totalBytes: number;
+}
+
 export interface TrashItem {
   asset: MediaAsset;
   trashedAt: number;

@@ -364,9 +364,18 @@ export default function SettingsScreen() {
           <GlassView intensity={30} borderRadius={20} style={[styles.card, { borderColor: colors.border }]}>
             <View style={styles.themeOptionsGrid}>
               {[
-                { id: 'oled', label: 'Negro OLED', icon: Moon, desc: '#000000 Puro' },
-                { id: 'glass_dark', label: 'Glass Dark', icon: Sparkles, desc: 'Translúcido' },
-                { id: 'light', label: 'Claro', icon: Sliders, desc: 'Minimalista' },
+                {
+                  id: 'oled',
+                  label: 'Negro AMOLED',
+                  icon: Moon,
+                  desc: 'Fondo negro puro, superficies de grafito y acento cian minimalista.',
+                },
+                {
+                  id: 'vintage',
+                  label: 'Vintage Cálido',
+                  icon: Sparkles,
+                  desc: 'Fotografía analógica: crema, papel lino, terracota y oliva suave.',
+                },
               ].map((item) => {
                 const isSelected = settings.theme === item.id;
                 const IconComponent = item.icon;
@@ -378,19 +387,31 @@ export default function SettingsScreen() {
                     style={[
                       styles.themeCard,
                       {
-                        backgroundColor: isSelected ? 'rgba(10, 132, 255, 0.15)' : colors.surfaceSubtle,
+                        backgroundColor: isSelected ? colors.tagBg : colors.surfaceSubtle,
                         borderColor: isSelected ? colors.primary : colors.border,
                       },
                     ]}
                   >
-                    <IconComponent
-                      size={20}
-                      color={isSelected ? colors.primary : colors.textSecondary}
-                    />
+                    <View
+                      style={[
+                        styles.themeIconBox,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.surface,
+                        },
+                      ]}
+                    >
+                      <IconComponent
+                        size={20}
+                        color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                      />
+                    </View>
                     <Text
                       style={[
                         styles.themeCardLabel,
-                        { color: isSelected ? colors.text : colors.textSecondary, fontWeight: isSelected ? '700' : '500' },
+                        {
+                          color: isSelected ? colors.text : colors.textSecondary,
+                          fontWeight: isSelected ? '800' : '600',
+                        },
                       ]}
                     >
                       {item.label}
@@ -540,16 +561,23 @@ const styles = StyleSheet.create({
   },
   themeOptionsGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   themeCard: {
     flex: 1,
     paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 14,
-    borderWidth: 1,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
     alignItems: 'center',
     gap: 6,
+  },
+  themeIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   themeCardLabel: {
     fontSize: 12,

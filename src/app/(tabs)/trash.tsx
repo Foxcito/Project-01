@@ -24,7 +24,7 @@ import {
 } from 'lucide-react-native';
 
 export default function TrashScreen() {
-  const { colors, haptics } = useSettings();
+  const { colors, haptics, settings } = useSettings();
   const {
     trashItems,
     totalTrashBytes,
@@ -79,7 +79,7 @@ export default function TrashScreen() {
   };
 
   const renderTrashGridItem = ({ item }: { item: TrashItem }) => (
-    <View style={styles.gridItemContainer}>
+    <View style={[styles.gridItemContainer, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
       <Image source={{ uri: item.asset.uri }} style={styles.gridThumbnail} resizeMode="cover" />
 
       {/* Indicador de Video o Tamaño */}
@@ -94,9 +94,15 @@ export default function TrashScreen() {
       <TouchableOpacity
         onPress={() => restoreTrashItem(item.asset.id)}
         activeOpacity={0.8}
-        style={[styles.restoreItemBtn, { backgroundColor: 'rgba(0, 0, 0, 0.75)' }]}
+        style={[
+          styles.restoreItemBtn,
+          {
+            backgroundColor: settings.theme === 'vintage' ? 'rgba(42, 36, 30, 0.85)' : 'rgba(0, 0, 0, 0.8)',
+            borderColor: colors.border,
+          },
+        ]}
       >
-        <RotateCcw size={14} color={colors.amber} />
+        <RotateCcw size={13} color={colors.amber} />
       </TouchableOpacity>
     </View>
   );
@@ -248,7 +254,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#111',
+    borderWidth: 1,
   },
   gridThumbnail: {
     width: '100%',

@@ -13,7 +13,7 @@ function RootLayoutContent() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={settings.theme === 'light' ? 'dark' : 'light'} />
+      <StatusBar style={settings.theme === 'vintage' ? 'dark' : 'light'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="+not-found" />

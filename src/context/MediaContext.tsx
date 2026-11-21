@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import { Share } from 'react-native';
 import * as MediaLibrary from 'expo-media-library/legacy';
-import { MediaAsset, AlbumItem, TrashItem, FilterType, UndoAction } from '@/types/media';
+import { MediaAsset, AlbumItem, TrashItem, FilterType, UndoAction, TimePeriodGroup } from '@/types/media';
 import { loadTrashItems, saveTrashItems, loadReviewedIds, saveReviewedIds } from '@/utils/storage';
+import { formatMonthYearFull } from '@/utils/formatters';
 import { useSettings } from './SettingsContext';
 
 interface MediaContextValue {
@@ -9,6 +11,10 @@ interface MediaContextValue {
   isLoading: boolean;
   activeFilter: FilterType;
   selectedAlbum: AlbumItem | null;
+  selectedPeriod: TimePeriodGroup | null;
+  timePeriods: TimePeriodGroup[];
+  cameraAlbum: AlbumItem;
+  otherAlbums: AlbumItem[];
   queue: MediaAsset[];
   currentIndex: number;
   currentAsset: MediaAsset | null;
@@ -20,12 +26,14 @@ interface MediaContextValue {
   albums: AlbumItem[];
   undoStack: UndoAction[];
   canUndo: boolean;
-  // Actions
+  // Acciones
   requestPermission: () => Promise<boolean>;
   setFilter: (filter: FilterType) => void;
   selectAlbumForReview: (album: AlbumItem | null) => void;
+  selectPeriodForReview: (period: TimePeriodGroup | null) => void;
   markAsKept: (asset?: MediaAsset) => void;
   moveToTrash: (asset?: MediaAsset) => void;
+  shareAsset: (asset?: MediaAsset) => Promise<void>;
   assignToAlbum: (album: AlbumItem, asset?: MediaAsset) => Promise<boolean>;
   createNewAlbum: (albumName: string, asset?: MediaAsset) => Promise<AlbumItem | null>;
   undo: () => void;
@@ -37,18 +45,22 @@ interface MediaContextValue {
 
 const MediaContext = createContext<MediaContextValue | null>(null);
 
-// Muestra de datos estética de demostración si la galería está vacía o se ejecuta en simulador
+// Muestra de datos estética y balanceada para simulación o galería vacía
+const NOW = Date.now();
+const DAY = 1000 * 60 * 60 * 24;
+
 const SAMPLE_MEDIA: MediaAsset[] = [
   {
     id: 'sample-1',
     uri: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1080&auto=format&fit=crop&q=80',
-    filename: 'Yosemite_Valley_2026.jpg',
+    filename: 'Yosemite_Valley_Sunrise.jpg',
     mediaType: 'photo',
     width: 1920,
     height: 1080,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 5, // 5 días atrás
+    creationTime: NOW - DAY * 2, // Noviembre 2026
     duration: 0,
-    fileSize: 4.8 * 1024 * 1024, // 4.8 MB
+    fileSize: 4.8 * 1024 * 1024,
+    albumTitle: 'Cámara',
   },
   {
     id: 'sample-2',
@@ -57,9 +69,10 @@ const SAMPLE_MEDIA: MediaAsset[] = [
     mediaType: 'photo',
     width: 1080,
     height: 1350,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 12,
+    creationTime: NOW - DAY * 7, // Noviembre 2026
     duration: 0,
     fileSize: 3.2 * 1024 * 1024,
+    albumTitle: 'Cámara',
   },
   {
     id: 'sample-3',
@@ -68,9 +81,10 @@ const SAMPLE_MEDIA: MediaAsset[] = [
     mediaType: 'video',
     width: 1920,
     height: 1080,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 20,
+    creationTime: NOW - DAY * 24, // Octubre 2026
     duration: 15,
-    fileSize: 28.5 * 1024 * 1024, // 28.5 MB
+    fileSize: 28.5 * 1024 * 1024,
+    albumTitle: 'Viajes',
   },
   {
     id: 'sample-4',
@@ -79,9 +93,10 @@ const SAMPLE_MEDIA: MediaAsset[] = [
     mediaType: 'photo',
     width: 1200,
     height: 1200,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 35,
+    creationTime: NOW - DAY * 38, // Octubre 2026
     duration: 0,
     fileSize: 2.1 * 1024 * 1024,
+    albumTitle: 'Diseño',
   },
   {
     id: 'sample-5',
@@ -90,9 +105,10 @@ const SAMPLE_MEDIA: MediaAsset[] = [
     mediaType: 'video',
     width: 1920,
     height: 1080,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 48,
+    creationTime: NOW - DAY * 65, // Septiembre 2026
     duration: 15,
-    fileSize: 42.0 * 1024 * 1024, // 42 MB
+    fileSize: 42.0 * 1024 * 1024,
+    albumTitle: 'Cámara',
   },
   {
     id: 'sample-6',
@@ -101,9 +117,34 @@ const SAMPLE_MEDIA: MediaAsset[] = [
     mediaType: 'photo',
     width: 1920,
     height: 1280,
-    creationTime: Date.now() - 1000 * 60 * 60 * 24 * 60,
+    creationTime: NOW - DAY * 75, // Septiembre 2026
     duration: 0,
     fileSize: 5.6 * 1024 * 1024,
+    albumTitle: 'Naturaleza',
+  },
+  {
+    id: 'sample-7',
+    uri: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=1080&auto=format&fit=crop&q=80',
+    filename: 'Autumn_Forest_Path.jpg',
+    mediaType: 'photo',
+    width: 1920,
+    height: 1080,
+    creationTime: NOW - DAY * 120, // Julio 2026
+    duration: 0,
+    fileSize: 6.1 * 1024 * 1024,
+    albumTitle: 'Viajes',
+  },
+  {
+    id: 'sample-8',
+    uri: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1080&auto=format&fit=crop&q=80',
+    filename: 'Sunset_Horizon_Vintage.jpg',
+    mediaType: 'photo',
+    width: 1920,
+    height: 1200,
+    creationTime: NOW - DAY * 360, // Noviembre 2025
+    duration: 0,
+    fileSize: 4.4 * 1024 * 1024,
+    albumTitle: 'Cámara',
   },
 ];
 
@@ -118,9 +159,10 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const [reviewedIds, setReviewedIds] = useState<Set<string>>(new Set());
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
 
-  // Filtros activos y selección
+  // Filtros activos y selecciones
   const [activeFilter, setActiveFilter] = useState<FilterType>('unorganized');
   const [selectedAlbum, setSelectedAlbum] = useState<AlbumItem | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriodGroup | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Carga inicial de almacenamiento local
@@ -134,7 +176,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // Solicitar permisos de galería
+  // Solicitar permisos de galería solo para fotos y videos
   const requestPermission = useCallback(async (): Promise<boolean> => {
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video']);
@@ -172,7 +214,6 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         const req = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video']);
         if (!req.granted) {
           setHasPermission(false);
-          // Si no hay permisos o es emulador, usar datos de demostración
           setRawAssets(SAMPLE_MEDIA);
           setIsLoading(false);
           return;
@@ -181,7 +222,6 @@ export function MediaProvider({ children }: { children: ReactNode }) {
       setHasPermission(true);
       await loadAlbums();
 
-      // Cargar los 400 elementos más recientes
       const mediaResult = await MediaLibrary.getAssetsAsync({
         first: 400,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
@@ -191,9 +231,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
       if (mediaResult.assets.length === 0) {
         setRawAssets(SAMPLE_MEDIA);
       } else {
-        // Enriquecer datos básicos (estándar MediaLibrary)
         const mapped: MediaAsset[] = mediaResult.assets.map((asset) => {
-          // Estimación o tamaño si disponible
           const estimatedSize =
             asset.mediaType === 'video'
               ? Math.max(1024 * 1024 * 15, Math.round((asset.duration || 10) * 1.5 * 1024 * 1024))
@@ -226,20 +264,113 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     reloadMedia();
   }, [reloadMedia]);
 
+  // Agrupación automática por meses y años
+  const timePeriods = useMemo<TimePeriodGroup[]>(() => {
+    const map = new Map<string, { year: number; month: number; count: number; totalBytes: number; sampleUri?: string }>();
+
+    rawAssets.forEach((asset) => {
+      const d = new Date(asset.creationTime);
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.totalBytes += asset.fileSize;
+        if (!existing.sampleUri) existing.sampleUri = asset.uri;
+      } else {
+        map.set(key, {
+          year,
+          month,
+          count: 1,
+          totalBytes: asset.fileSize,
+          sampleUri: asset.uri,
+        });
+      }
+    });
+
+    return Array.from(map.entries())
+      .map(([key, data]) => ({
+        key,
+        label: formatMonthYearFull(data.year, data.month),
+        year: data.year,
+        month: data.month,
+        count: data.count,
+        sampleUri: data.sampleUri,
+        totalBytes: data.totalBytes,
+      }))
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+  }, [rawAssets]);
+
+  // Separación: Álbum de Cámara Principal vs Otros Álbumes
+  const cameraAlbum = useMemo<AlbumItem>(() => {
+    const found = albums.find(
+      (a) =>
+        a.id === 'camera-special' ||
+        a.title.toLowerCase() === 'camera' ||
+        a.title.toLowerCase() === 'cámara' ||
+        a.title.toLowerCase() === 'dcim' ||
+        a.title.toLowerCase() === 'recientes'
+    );
+    if (found) return found;
+
+    return {
+      id: 'camera-special',
+      title: 'Cámara Principal',
+      assetCount: rawAssets.filter((a) => !a.albumId || a.albumId === 'Camera').length,
+    };
+  }, [albums, rawAssets]);
+
+  const otherAlbums = useMemo<AlbumItem[]>(() => {
+    const list = albums.filter(
+      (a) =>
+        a.id !== 'camera-special' &&
+        a.title.toLowerCase() !== 'camera' &&
+        a.title.toLowerCase() !== 'cámara' &&
+        a.title.toLowerCase() !== 'dcim' &&
+        a.title.toLowerCase() !== 'recientes'
+    );
+    if (list.length === 0) {
+      // Álbumes de muestra si no hay otros
+      return [
+        { id: 'sample-alb-1', title: 'Viajes', assetCount: 14 },
+        { id: 'sample-alb-2', title: 'Diseño & Capturas', assetCount: 8 },
+        { id: 'sample-alb-3', title: 'Naturaleza', assetCount: 19 },
+      ];
+    }
+    return list;
+  }, [albums]);
+
   // Filtrar la cola activa
   const queue = useMemo(() => {
     const trashedIds = new Set(trashItems.map((t) => t.asset.id));
-
-    // Descartar elementos ya eliminados a la papelera o ya marcados como revisados
     let list = rawAssets.filter((a) => !trashedIds.has(a.id) && !reviewedIds.has(a.id));
 
-    if (selectedAlbum) {
-      list = list.filter((a) => a.albumId === selectedAlbum.id);
+    if (selectedPeriod) {
+      list = list.filter((a) => {
+        const d = new Date(a.creationTime);
+        return d.getFullYear() === selectedPeriod.year && d.getMonth() === selectedPeriod.month;
+      });
+    } else if (selectedAlbum) {
+      if (selectedAlbum.id === 'camera-special') {
+        list = list.filter(
+          (a) =>
+            !a.albumId ||
+            a.albumId === 'Camera' ||
+            a.albumTitle?.toLowerCase().includes('cámara') ||
+            a.albumTitle?.toLowerCase().includes('camera')
+        );
+      } else {
+        list = list.filter((a) => a.albumId === selectedAlbum.id || a.albumTitle === selectedAlbum.title);
+      }
     } else {
       switch (activeFilter) {
         case 'unorganized':
-          // Sin álbum asignado o con álbum genérico de cámara
-          list = list.filter((a) => !a.albumId || a.albumId === 'Camera');
+          list = list.filter((a) => !a.albumId || a.albumId === 'Camera' || a.albumTitle === 'Cámara');
           break;
         case 'recent':
           list = [...list].sort((a, b) => b.creationTime - a.creationTime);
@@ -259,7 +390,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     }
 
     return list;
-  }, [rawAssets, trashItems, reviewedIds, selectedAlbum, activeFilter]);
+  }, [rawAssets, trashItems, reviewedIds, selectedPeriod, selectedAlbum, activeFilter]);
 
   const currentAsset = queue[currentIndex] || null;
   const totalInQueue = queue.length;
@@ -271,7 +402,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   );
   const canUndo = undoStack.length > 0;
 
-  // Acción: Deslizar para CONSERVAR
+  // Acción: Deslizar o presionar para CONSERVAR / SIGUIENTE
   const markAsKept = useCallback(
     (assetParam?: MediaAsset) => {
       const asset = assetParam || currentAsset;
@@ -289,7 +420,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     [currentAsset, reviewedIds, haptics, incrementStats]
   );
 
-  // Acción: Deslizar para PAPELERA TEMPORAL
+  // Acción: Deslizar o presionar para PAPELERA TEMPORAL
   const moveToTrash = useCallback(
     (assetParam?: MediaAsset) => {
       const asset = assetParam || currentAsset;
@@ -312,7 +443,27 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     [currentAsset, trashItems, haptics, incrementStats]
   );
 
-  // Acción: Asignar a Álbum desde la barra rápida
+  // Acción: Compartir archivo actual
+  const shareAsset = useCallback(
+    async (assetParam?: MediaAsset) => {
+      const asset = assetParam || currentAsset;
+      if (!asset) return;
+
+      haptics.impactLight();
+      try {
+        await Share.share({
+          title: asset.filename,
+          message: `Foto/video de mi galería: ${asset.filename}`,
+          url: asset.uri,
+        });
+      } catch (err) {
+        console.warn('Error al compartir medio:', err);
+      }
+    },
+    [currentAsset, haptics]
+  );
+
+  // Acción: Asignar a Álbum desde la barra inferior
   const assignToAlbum = useCallback(
     async (album: AlbumItem, assetParam?: MediaAsset): Promise<boolean> => {
       const asset = assetParam || currentAsset;
@@ -328,7 +479,6 @@ export function MediaProvider({ children }: { children: ReactNode }) {
           );
         }
 
-        // Marcar como organizado/revisado
         const newReviewed = new Set(reviewedIds);
         newReviewed.add(asset.id);
         setReviewedIds(newReviewed);
@@ -340,7 +490,6 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         ]);
         incrementStats({ organized: 1, reviewed: 1 });
 
-        // Actualizar contador del álbum localmente
         setAlbums((prev) =>
           prev.map((a) => (a.id === album.id ? { ...a, assetCount: a.assetCount + 1 } : a))
         );
@@ -412,13 +561,11 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     setUndoStack(remainingStack);
 
     if (lastAction.type === 'trash') {
-      // Remover de la papelera
       const updatedTrash = trashItems.filter((t) => t.asset.id !== lastAction.asset.id);
       setTrashItems(updatedTrash);
       saveTrashItems(updatedTrash);
       incrementStats({ trashed: -1, bytesFreed: -lastAction.asset.fileSize });
     } else if (lastAction.type === 'keep') {
-      // Remover de revisados
       const newReviewed = new Set(reviewedIds);
       newReviewed.delete(lastAction.asset.id);
       setReviewedIds(newReviewed);
@@ -461,7 +608,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     incrementStats({ trashed: -count, bytesFreed: -freedBytes });
   }, [trashItems.length, totalTrashBytes, haptics, incrementStats]);
 
-  // Borrado Real en Android en un solo lote
+  // Borrado Real en Android en lote
   const emptyTrashReal = useCallback(async (): Promise<{ success: boolean; deletedCount: number }> => {
     if (trashItems.length === 0) return { success: true, deletedCount: 0 };
     haptics.impactHeavy();
@@ -480,8 +627,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
       haptics.notificationSuccess();
       return { success: true, deletedCount: count };
     } catch (err) {
-      console.warn('Error al ejecutar borrado por lote en MediaLibrary:', err);
-      // Mantener borrado en app interna
+      console.warn('Error al ejecutar borrado en lote en MediaLibrary:', err);
       setTrashItems([]);
       await saveTrashItems([]);
       return { success: true, deletedCount: count };
@@ -490,12 +636,20 @@ export function MediaProvider({ children }: { children: ReactNode }) {
 
   const setFilter = useCallback((filter: FilterType) => {
     setSelectedAlbum(null);
+    setSelectedPeriod(null);
     setActiveFilter(filter);
     setCurrentIndex(0);
   }, []);
 
   const selectAlbumForReview = useCallback((album: AlbumItem | null) => {
     setSelectedAlbum(album);
+    setSelectedPeriod(null);
+    setCurrentIndex(0);
+  }, []);
+
+  const selectPeriodForReview = useCallback((period: TimePeriodGroup | null) => {
+    setSelectedPeriod(period);
+    setSelectedAlbum(null);
     setCurrentIndex(0);
   }, []);
 
@@ -506,6 +660,10 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         isLoading,
         activeFilter,
         selectedAlbum,
+        selectedPeriod,
+        timePeriods,
+        cameraAlbum,
+        otherAlbums,
         queue,
         currentIndex,
         currentAsset,
@@ -520,8 +678,10 @@ export function MediaProvider({ children }: { children: ReactNode }) {
         requestPermission,
         setFilter,
         selectAlbumForReview,
+        selectPeriodForReview,
         markAsKept,
         moveToTrash,
+        shareAsset,
         assignToAlbum,
         createNewAlbum,
         undo,

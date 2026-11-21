@@ -5,7 +5,6 @@ import {
   Image,
   Text,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -16,9 +15,9 @@ import Animated, {
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { MediaAsset } from '@/types/media';
 import { useSettings } from '@/context/SettingsContext';
-import { formatBytes, formatDuration } from '@/utils/formatters';
+import { formatBytes, formatDuration, formatDateTime } from '@/utils/formatters';
 import { GlassView } from './GlassView';
-import { Volume2, VolumeX, Video as VideoIcon, Image as ImageIcon } from 'lucide-react-native';
+import { Volume2, VolumeX, Video as VideoIcon, Image as ImageIcon, Calendar } from 'lucide-react-native';
 
 interface MediaCardProps {
   asset: MediaAsset;
@@ -78,8 +77,20 @@ export function MediaCard({ asset, isActive }: MediaCardProps) {
     setIsMuted((prev) => !prev);
   };
 
+  const isVintage = settings.theme === 'vintage';
+  const dateTimeFormatted = formatDateTime(asset.creationTime);
+
   return (
-    <View style={styles.cardInner}>
+    <View
+      style={[
+        styles.cardInner,
+        {
+          backgroundColor: isVintage ? '#EFE8DE' : '#05070A',
+          borderColor: colors.border,
+          borderWidth: 1.5,
+        },
+      ]}
+    >
       {asset.mediaType === 'photo' ? (
         <GestureDetector gesture={pinchGesture}>
           <Animated.View style={[styles.mediaContainer, animatedImageStyle]}>
@@ -111,20 +122,46 @@ export function MediaCard({ asset, isActive }: MediaCardProps) {
           <TouchableOpacity
             onPress={toggleSound}
             activeOpacity={0.8}
-            style={[styles.audioToggleBtn, { backgroundColor: 'rgba(0, 0, 0, 0.65)' }]}
+            style={[
+              styles.audioToggleBtn,
+              {
+                backgroundColor: isVintage ? 'rgba(42, 36, 30, 0.75)' : 'rgba(0, 0, 0, 0.7)',
+                borderColor: colors.border,
+              },
+            ]}
           >
             {isMuted ? (
-              <VolumeX size={18} color="#FFFFFF" />
+              <VolumeX size={17} color="#FFFFFF" />
             ) : (
-              <Volume2 size={18} color={colors.accent} />
+              <Volume2 size={17} color={colors.accent} />
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Etiquetas / Badges informativos en las esquinas */}
+      {/* Overlay Superior: Fecha y hora exacta */}
+      <View style={styles.topTimestampOverlay}>
+        <GlassView
+          intensity={40}
+          borderRadius={14}
+          style={[styles.timestampGlass, { borderColor: colors.border }]}
+        >
+          <View style={styles.timestampContent}>
+            <Calendar size={12} color={colors.accent} />
+            <Text style={[styles.timestampText, { color: colors.text }]}>
+              {dateTimeFormatted}
+            </Text>
+          </View>
+        </GlassView>
+      </View>
+
+      {/* Overlay Inferior: Badges de tamaño, tipo y álbum */}
       <View style={styles.bottomBadgesOverlay}>
-        <GlassView intensity={40} borderRadius={12} style={styles.badgeGlass}>
+        <GlassView
+          intensity={45}
+          borderRadius={12}
+          style={[styles.badgeGlass, { borderColor: colors.border }]}
+        >
           <View style={styles.badgeContent}>
             {asset.mediaType === 'video' ? (
               <VideoIcon size={12} color={colors.accent} />
@@ -140,8 +177,12 @@ export function MediaCard({ asset, isActive }: MediaCardProps) {
         </GlassView>
 
         {asset.albumTitle && (
-          <GlassView intensity={40} borderRadius={12} style={styles.badgeGlass}>
-            <Text style={[styles.badgeText, { color: colors.accent }]}>
+          <GlassView
+            intensity={45}
+            borderRadius={12}
+            style={[styles.badgeGlass, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.badgeText, { color: colors.primary, fontWeight: '700' }]}>
               {asset.albumTitle}
             </Text>
           </GlassView>
@@ -155,9 +196,8 @@ const styles = StyleSheet.create({
   cardInner: {
     width: '100%',
     height: '100%',
-    borderRadius: 24,
+    borderRadius: 26,
     overflow: 'hidden',
-    backgroundColor: '#050505',
     position: 'relative',
   },
   mediaContainer: {
@@ -174,32 +214,55 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  topTimestampOverlay: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    pointerEvents: 'none',
+    zIndex: 20,
+  },
+  timestampGlass: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  timestampContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timestampText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
   audioToggleBtn: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    top: 14,
+    right: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    zIndex: 20,
+    zIndex: 25,
   },
   bottomBadgesOverlay: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
+    bottom: 14,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     pointerEvents: 'none',
+    zIndex: 20,
   },
   badgeGlass: {
     paddingHorizontal: 10,
     paddingVertical: 6,
+    borderWidth: 1,
   },
   badgeContent: {
     flexDirection: 'row',

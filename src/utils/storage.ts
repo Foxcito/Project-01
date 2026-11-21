@@ -27,9 +27,11 @@ export async function loadUserSettings(): Promise<UserSettings> {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
+    const normalizedTheme = parsed.theme === 'vintage' ? 'vintage' : 'oled';
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      theme: normalizedTheme,
       stats: {
         ...DEFAULT_SETTINGS.stats,
         ...(parsed.stats || {}),

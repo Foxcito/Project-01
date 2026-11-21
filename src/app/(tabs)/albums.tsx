@@ -12,22 +12,40 @@ import { useSettings } from '@/context/SettingsContext';
 import { useMedia } from '@/context/MediaContext';
 import { GlassView } from '@/components/GlassView';
 import { CreateAlbumModal } from '@/components/CreateAlbumModal';
-import { AlbumItem } from '@/types/media';
-import { Folder, FolderPlus, Play, Sparkles, Layers } from 'lucide-react-native';
+import { AlbumItem, TimePeriodGroup } from '@/types/media';
+import { formatBytes } from '@/utils/formatters';
+import {
+  Folder,
+  FolderPlus,
+  Play,
+  Calendar,
+  Camera,
+  Layers,
+  ArrowRight,
+} from 'lucide-react-native';
 import { router } from 'expo-router';
 
-type AlbumTab = 'organized' | 'unorganized';
+type AlbumViewMode = 'timeline' | 'folders';
 
 export default function AlbumsScreen() {
   const { colors, haptics } = useSettings();
-  const { albums, selectAlbumForReview, setFilter, createNewAlbum } = useMedia();
+  const {
+    timePeriods,
+    cameraAlbum,
+    otherAlbums,
+    selectAlbumForReview,
+    selectPeriodForReview,
+    createNewAlbum,
+  } = useMedia();
 
-  const [activeTab, setActiveTab] = useState<AlbumTab>('organized');
+  const [activeMode, setActiveMode] = useState<AlbumViewMode>('timeline');
   const [createModalVisible, setCreateModalVisible] = useState(false);
 
-  // Separar álbumes: Organizados (carpetas con nombre) vs Sin organizar
-  const organizedAlbums = albums.filter((a) => a.title.toLowerCase() !== 'camera');
-  const unorganizedCount = albums.find((a) => a.title.toLowerCase() === 'camera')?.assetCount || 0;
+  const handleReviewPeriod = (period: TimePeriodGroup) => {
+    haptics.impactLight();
+    selectPeriodForReview(period);
+    router.replace('/');
+  };
 
   const handleReviewAlbum = (album: AlbumItem) => {
     haptics.impactLight();
@@ -35,15 +53,45 @@ export default function AlbumsScreen() {
     router.replace('/');
   };
 
-  const handleReviewUnorganized = () => {
-    haptics.impactLight();
-    setFilter('unorganized');
-    router.replace('/');
-  };
-
-  const renderAlbumCard = ({ item }: { item: AlbumItem }) => (
+  // Renderizador para tarjetas de meses/años
+  const renderPeriodItem = ({ item }: { item: TimePeriodGroup }) => (
     <GlassView
-      intensity={25}
+      intensity={30}
+      borderRadius={22}
+      style={[styles.periodCard, { borderColor: colors.border }]}
+    >
+      <View style={styles.periodCardLeft}>
+        {item.sampleUri ? (
+          <Image source={{ uri: item.sampleUri }} style={styles.periodThumb} resizeMode="cover" />
+        ) : (
+          <View style={[styles.periodThumbFallback, { backgroundColor: colors.surfaceSubtle }]}>
+            <Calendar size={22} color={colors.primary} />
+          </View>
+        )}
+
+        <View style={styles.periodMeta}>
+          <Text style={[styles.periodTitle, { color: colors.text }]}>{item.label}</Text>
+          <Text style={[styles.periodSubtitle, { color: colors.textSecondary }]}>
+            {item.count} {item.count === 1 ? 'archivo' : 'archivos'} · {formatBytes(item.totalBytes)}
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        onPress={() => handleReviewPeriod(item)}
+        activeOpacity={0.8}
+        style={[styles.reviewBtn, { backgroundColor: colors.tagBg, borderColor: colors.primary }]}
+      >
+        <Play size={12} color={colors.primary} fill={colors.primary} />
+        <Text style={[styles.reviewBtnText, { color: colors.primary }]}>Revisar</Text>
+      </TouchableOpacity>
+    </GlassView>
+  );
+
+  // Renderizador para tarjetas de álbumes
+  const renderAlbumItem = ({ item }: { item: AlbumItem }) => (
+    <GlassView
+      intensity={28}
       borderRadius={20}
       style={[styles.albumCard, { borderColor: colors.border }]}
     >
@@ -64,10 +112,10 @@ export default function AlbumsScreen() {
       <TouchableOpacity
         onPress={() => handleReviewAlbum(item)}
         activeOpacity={0.8}
-        style={[styles.reviewBtn, { backgroundColor: 'rgba(10, 132, 255, 0.15)', borderColor: colors.primary }]}
+        style={[styles.reviewBtn, { backgroundColor: colors.tagBg, borderColor: colors.primary }]}
       >
-        <Play size={13} color={colors.primary} fill={colors.primary} />
-        <Text style={[styles.reviewBtnText, { color: colors.primary }]}>Revisar Álbum</Text>
+        <Play size={12} color={colors.primary} fill={colors.primary} />
+        <Text style={[styles.reviewBtnText, { color: colors.primary }]}>Revisar</Text>
       </TouchableOpacity>
     </GlassView>
   );
@@ -78,9 +126,9 @@ export default function AlbumsScreen() {
         {/* Encabezado */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={[styles.screenTitle, { color: colors.text }]}>Álbumes</Text>
+            <Text style={[styles.screenTitle, { color: colors.text }]}>Organización</Text>
             <Text style={[styles.screenSubtitle, { color: colors.textSecondary }]}>
-              Organiza tus fotos por carpetas
+              Navega por períodos temporales o carpetas
             </Text>
           </View>
           <TouchableOpacity
@@ -91,100 +139,131 @@ export default function AlbumsScreen() {
             activeOpacity={0.8}
             style={[styles.newAlbumBtn, { backgroundColor: colors.primary }]}
           >
-            <FolderPlus size={16} color="#FFFFFF" />
+            <FolderPlus size={15} color="#FFFFFF" />
             <Text style={styles.newAlbumBtnText}>Nuevo</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Selector de pestañas: Organizados vs Sin organizar */}
+        {/* Selector de Pestañas: Por Períodos vs Por Carpetas */}
         <View style={[styles.tabSegmentContainer, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
           <TouchableOpacity
             onPress={() => {
               haptics.selection();
-              setActiveTab('organized');
+              setActiveMode('timeline');
             }}
             style={[
               styles.tabSegment,
-              activeTab === 'organized' && [styles.activeTabSegment, { backgroundColor: colors.surface }],
+              activeMode === 'timeline' && [styles.activeTabSegment, { backgroundColor: colors.surface }],
             ]}
           >
             <Text
               style={[
                 styles.tabSegmentText,
-                { color: activeTab === 'organized' ? colors.text : colors.textMuted },
+                { color: activeMode === 'timeline' ? colors.text : colors.textMuted },
               ]}
             >
-              Organizados ({organizedAlbums.length})
+              Meses y Años ({timePeriods.length})
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => {
               haptics.selection();
-              setActiveTab('unorganized');
+              setActiveMode('folders');
             }}
             style={[
               styles.tabSegment,
-              activeTab === 'unorganized' && [styles.activeTabSegment, { backgroundColor: colors.surface }],
+              activeMode === 'folders' && [styles.activeTabSegment, { backgroundColor: colors.surface }],
             ]}
           >
             <Text
               style={[
                 styles.tabSegmentText,
-                { color: activeTab === 'unorganized' ? colors.text : colors.textMuted },
+                { color: activeMode === 'folders' ? colors.text : colors.textMuted },
               ]}
             >
-              Sin organizar
+              Carpetas del Dispositivo
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Contenido según pestaña */}
-        {activeTab === 'organized' ? (
+        {/* Vista por Períodos */}
+        {activeMode === 'timeline' ? (
           <FlatList
-            data={organizedAlbums}
-            keyExtractor={(item) => item.id}
-            renderItem={renderAlbumCard}
+            data={timePeriods}
+            keyExtractor={(item) => item.key}
+            renderItem={renderPeriodItem}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.emptyView}>
-                <Folder size={48} color={colors.textMuted} />
+                <Calendar size={44} color={colors.textMuted} />
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  No tienes álbumes organizados aún.
+                  No se encontraron períodos de fotos en la galería.
                 </Text>
-                <TouchableOpacity
-                  onPress={() => setCreateModalVisible(true)}
-                  style={[styles.emptyActionBtn, { backgroundColor: colors.primary }]}
-                >
-                  <Text style={styles.emptyActionBtnText}>Crear Primer Álbum</Text>
-                </TouchableOpacity>
               </View>
             }
           />
         ) : (
-          <View style={styles.unorganizedContainer}>
-            <GlassView intensity={30} borderRadius={24} style={[styles.unorganizedCard, { borderColor: colors.border }]}>
-              <View style={[styles.unorganizedIconCircle, { backgroundColor: 'rgba(255, 159, 10, 0.15)' }]}>
-                <Layers size={36} color={colors.amber} />
-              </View>
-              <Text style={[styles.unorganizedTitle, { color: colors.text }]}>
-                Fotos y Videos Sin Álbum
-              </Text>
-              <Text style={[styles.unorganizedDesc, { color: colors.textSecondary }]}>
-                Archivos en la cámara principal que aún no han sido clasificados en ninguna carpeta.
-              </Text>
+          /* Vista por Carpetas: Cámara Principal destacada + Álbumes */
+          <FlatList
+            data={otherAlbums}
+            keyExtractor={(item) => item.id}
+            renderItem={renderAlbumItem}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View style={styles.cameraBannerWrapper}>
+                {/* Banner Destacado de Cámara */}
+                <GlassView
+                  intensity={35}
+                  borderRadius={22}
+                  style={[
+                    styles.cameraCard,
+                    {
+                      borderColor: colors.primary,
+                      backgroundColor: colors.tagBg,
+                    },
+                  ]}
+                >
+                  <View style={styles.cameraLeft}>
+                    <View style={[styles.cameraIconCircle, { backgroundColor: colors.primary }]}>
+                      <Camera size={22} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.cameraMeta}>
+                      <Text style={[styles.cameraTitle, { color: colors.text }]}>
+                        {cameraAlbum.title}
+                      </Text>
+                      <Text style={[styles.cameraSubtitle, { color: colors.textSecondary }]}>
+                        {cameraAlbum.assetCount} fotos y videos sin archivar
+                      </Text>
+                    </View>
+                  </View>
 
-              <TouchableOpacity
-                onPress={handleReviewUnorganized}
-                activeOpacity={0.8}
-                style={[styles.startReviewBtn, { backgroundColor: colors.amber }]}
-              >
-                <Play size={16} color="#000000" fill="#000000" />
-                <Text style={styles.startReviewBtnText}>Revisar Sin Organizar</Text>
-              </TouchableOpacity>
-            </GlassView>
-          </View>
+                  <TouchableOpacity
+                    onPress={() => handleReviewAlbum(cameraAlbum)}
+                    activeOpacity={0.85}
+                    style={[styles.cameraReviewBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={styles.cameraReviewBtnText}>Revisar</Text>
+                    <ArrowRight size={14} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </GlassView>
+
+                <Text style={[styles.sectionDividerTitle, { color: colors.textMuted }]}>
+                  OTROS ÁLBUMES DEL DISPOSITIVO ({otherAlbums.length})
+                </Text>
+              </View>
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyView}>
+                <Folder size={44} color={colors.textMuted} />
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  No se encontraron otras carpetas adicionales.
+                </Text>
+              </View>
+            }
+          />
         )}
       </View>
 
@@ -212,7 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   screenTitle: {
     fontSize: 26,
@@ -227,8 +306,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
     borderRadius: 14,
   },
   newAlbumBtnText: {
@@ -238,35 +317,139 @@ const styles = StyleSheet.create({
   },
   tabSegmentContainer: {
     flexDirection: 'row',
-    borderRadius: 14,
+    borderRadius: 13,
     borderWidth: 1,
     padding: 3,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   tabSegment: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 11,
+    paddingVertical: 8,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeTabSegment: {
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   tabSegmentText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   listContent: {
-    paddingBottom: 90,
+    paddingBottom: 95,
+    gap: 10,
+  },
+  periodCard: {
+    padding: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  periodCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  periodThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+  },
+  periodThumbFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  periodMeta: {
+    flex: 1,
+  },
+  periodTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  periodSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reviewBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cameraBannerWrapper: {
+    marginBottom: 10,
     gap: 12,
   },
-  albumCard: {
+  cameraCard: {
     padding: 16,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cameraLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  cameraIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraMeta: {
+    flex: 1,
+  },
+  cameraTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cameraSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cameraReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  cameraReviewBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionDividerTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginLeft: 4,
+    marginTop: 6,
+  },
+  albumCard: {
+    padding: 14,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -279,9 +462,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -289,25 +472,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   albumTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   albumCount: {
     fontSize: 12,
     marginTop: 2,
-  },
-  reviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  reviewBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   emptyView: {
     alignItems: 'center',
@@ -316,60 +486,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  emptyActionBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  emptyActionBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  unorganizedContainer: {
-    flex: 1,
-    paddingTop: 20,
-  },
-  unorganizedCard: {
-    padding: 28,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  unorganizedIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  unorganizedTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  unorganizedDesc: {
     fontSize: 13,
     textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 24,
-    paddingHorizontal: 16,
-  },
-  startReviewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-  },
-  startReviewBtnText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
   },
 });
